@@ -20,11 +20,14 @@ import com.ryacub.melonsense.R
 @Composable
 fun PlaceholderScreen(
     @StringRes headlineRes: Int,
-    @StringRes bodyRes: Int,
     modifier: Modifier = Modifier,
+    @StringRes bodyRes: Int? = null,
+    body: String? = null,
     @StringRes actionRes: Int? = null,
     onAction: (() -> Unit)? = null,
 ) {
+    val bodyText = body ?: bodyRes?.let { stringResource(it) }.orEmpty()
+
     Surface(modifier = modifier.fillMaxSize()) {
         Column(
             modifier =
@@ -39,7 +42,7 @@ fun PlaceholderScreen(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = stringResource(bodyRes),
+                text = bodyText,
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
