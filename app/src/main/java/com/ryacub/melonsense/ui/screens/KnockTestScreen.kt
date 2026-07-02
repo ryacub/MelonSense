@@ -47,6 +47,7 @@ import com.ryacub.melonsense.domain.audio.KnockAudioAnalyzer
 import com.ryacub.melonsense.domain.model.AudioScanResult
 import com.ryacub.melonsense.domain.model.KnockCapture
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
+import com.ryacub.melonsense.domain.model.ResultLabel
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -382,6 +383,7 @@ private fun buildAssessmentResult(
         visualScanResult = visualScanResult,
         audioScanResult = audioScanResult,
         recommendation = recommendation,
+        resultLabel = ResultLabel.GoodCandidate,
         confidencePercent = finalConfidence,
     )
 }
