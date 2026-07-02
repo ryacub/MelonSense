@@ -21,6 +21,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.ryacub.melonsense.domain.model.MelonAssessmentResult
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import com.ryacub.melonsense.ui.screens.HistoryScreen
 import com.ryacub.melonsense.ui.screens.KnockTestScreen
@@ -33,6 +34,7 @@ import com.ryacub.melonsense.ui.screens.SettingsScreen
 fun MelonSenseApp() {
     val navController = rememberNavController()
     var visualScanResult by remember { mutableStateOf<VisualScanResult?>(null) }
+    var melonAssessmentResult by remember { mutableStateOf<MelonAssessmentResult?>(null) }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val selectedDestination =
@@ -88,13 +90,15 @@ fun MelonSenseApp() {
             composable(MelonSenseDestination.KnockTest.route) {
                 KnockTestScreen(
                     visualScanResult = visualScanResult,
-                    onAnalyzeResult = {
+                    onAnalyzeResult = { result ->
+                        melonAssessmentResult = result
                         navController.navigate(MelonSenseDestination.Result.route)
                     },
                 )
             }
             composable(MelonSenseDestination.Result.route) {
                 ResultScreen(
+                    assessmentResult = melonAssessmentResult,
                     onPickedThis = {
                         navController.navigate(MelonSenseDestination.History.route)
                     },
