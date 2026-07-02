@@ -5,3 +5,6 @@
 /.idea/
 *.iml
 
+
+# Local git worktrees
+.worktrees/
