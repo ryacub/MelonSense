@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">MelonSense</string>
+    <string name="scan_title">Scan</string>
+    <string name="knock_test_title">Knock Test</string>
+    <string name="result_title">Result</string>
+    <string name="history_title">History</string>
+    <string name="settings_title">Settings</string>
+    <string name="scan_headline">Frame a watermelon</string>
+    <string name="scan_body">Live camera framing and best-frame capture will appear here.</string>
+    <string name="scan_primary_action">Start Knock Test</string>
+    <string name="knock_headline">Capture 3 knocks</string>
+    <string name="knock_body">AudioRecord capture, knock validation, and FFT scoring will appear here.</string>
+    <string name="knock_primary_action">Analyze Result</string>
+    <string name="result_headline">Good Candidate</string>
+    <string name="result_body">Visual and knock evidence will be combined here.</string>
+    <string name="result_primary_action">I Picked This</string>
+    <string name="history_headline">Picked melons</string>
+    <string name="history_body">Pending Outcome, Rated, and Expired Media entries will appear here.</string>
+    <string name="settings_headline">App settings</string>
+    <string name="settings_body">Training capture, retention, and model settings will appear here.</string>
+    <string name="placeholder_confidence">Confidence placeholder</string>
+</resources>
