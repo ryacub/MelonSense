@@ -297,6 +297,22 @@ class DatasetPipelineTest(unittest.TestCase):
                 records[0]["annotations"][0]["polygon_yolo"],
             )
 
+    def test_read_yolo_class_names_accepts_inline_yaml_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_yaml = Path(tmp_dir) / "data.yaml"
+            data_yaml.write_text(
+                "names: - Apple - Banana - Grape - Orange - Pineapple - Watermelon "
+                "nc: 6 test: test/images train: train/images val: valid/images\n",
+                encoding="utf-8",
+            )
+
+            names = dataset_pipeline.read_yolo_class_names(data_yaml)
+
+            self.assertEqual(
+                ["Apple", "Banana", "Grape", "Orange", "Pineapple", "Watermelon"],
+                names,
+            )
+
 
 def write_manifest_records(
     manifest_file: Path,
