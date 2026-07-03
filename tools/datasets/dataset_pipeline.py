@@ -5,6 +5,7 @@ import ast
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import urllib.parse
@@ -76,6 +77,24 @@ APPROVED_SOURCES: dict[str, DatasetSource] = {
         source_labels={
             "Ripe": "ripe",
             "unripe": "unripe",
+        },
+        task_type="object_detection",
+    ),
+    "lightly-fruits-detection": DatasetSource(
+        source_id="lightly-fruits-detection",
+        source_url="https://github.com/lightly-ai/dataset_fruits_detection",
+        roboflow_workspace="",
+        roboflow_project="",
+        roboflow_version=0,
+        license="CC0-1.0",
+        attribution="dataset_fruits_detection by lightly-ai on GitHub",
+        source_labels={
+            "Apple": "fruit_detection_other",
+            "Banana": "fruit_detection_other",
+            "Grape": "fruit_detection_other",
+            "Orange": "fruit_detection_other",
+            "Pineapple": "fruit_detection_other",
+            "Watermelon": "watermelon_detection_only",
         },
         task_type="object_detection",
     ),
@@ -394,15 +413,41 @@ def build_yolo_detection_records(
 def read_yolo_class_names(data_yaml: Path) -> list[str]:
     if not data_yaml.exists():
         raise FileNotFoundError(f"Missing YOLO data.yaml: {data_yaml}")
-    for line in data_yaml.read_text(encoding="utf-8").splitlines():
+    lines = data_yaml.read_text(encoding="utf-8").splitlines()
+    for line_index, line in enumerate(lines):
         if not line.strip().startswith("names:"):
             continue
         _, raw_names = line.split(":", 1)
-        names = ast.literal_eval(raw_names.strip())
+        stripped_names = raw_names.strip()
+        if stripped_names.startswith("["):
+            names = ast.literal_eval(stripped_names)
+        elif stripped_names.startswith("- "):
+            names = parse_inline_yaml_list(stripped_names)
+        elif not stripped_names:
+            names = parse_block_yaml_list(lines[line_index + 1 :])
+        else:
+            raise ValueError(f"Unsupported YOLO names format: {data_yaml}")
         if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
             raise ValueError("YOLO data.yaml names must be a list of strings")
         return names
     raise ValueError(f"YOLO data.yaml missing names: {data_yaml}")
+
+
+def parse_inline_yaml_list(raw_names: str) -> list[str]:
+    raw_names = re.split(r"\s+(?:nc|train|val|test):\s*", raw_names, maxsplit=1)[0]
+    return [item.strip() for item in raw_names.split("- ") if item.strip()]
+
+
+def parse_block_yaml_list(lines: list[str]) -> list[str]:
+    names: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not stripped.startswith("- "):
+            break
+        names.append(stripped[2:].strip())
+    return names
 
 
 def read_yolo_annotations(
