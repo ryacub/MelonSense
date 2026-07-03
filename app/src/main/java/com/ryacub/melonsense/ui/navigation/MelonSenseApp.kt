@@ -33,6 +33,7 @@ import com.ryacub.melonsense.data.training.TrainingDatasetExportRepository
 import com.ryacub.melonsense.data.training.TrainingQueueItem
 import com.ryacub.melonsense.data.training.TrainingRetentionRepository
 import com.ryacub.melonsense.data.training.scheduleTrainingRetentionWork
+import com.ryacub.melonsense.domain.inference.PlaceholderMelonInferenceEngine
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import com.ryacub.melonsense.ui.screens.HistoryScreen
@@ -51,6 +52,7 @@ fun MelonSenseApp() {
     val coroutineScope = rememberCoroutineScope()
     val database = remember(context) { MelonSenseDatabase.getInstance(context) }
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
+    val inferenceEngine = remember { PlaceholderMelonInferenceEngine() }
     val historyRepository =
         remember(database) {
             RoomHistoryRepository(
@@ -133,6 +135,7 @@ fun MelonSenseApp() {
         ) {
             composable(MelonSenseDestination.Scan.route) {
                 ScanScreen(
+                    inferenceEngine = inferenceEngine,
                     onStartKnockTest = { result ->
                         visualScanResult = result
                         navController.navigate(MelonSenseDestination.KnockTest.route)
@@ -141,6 +144,7 @@ fun MelonSenseApp() {
             }
             composable(MelonSenseDestination.KnockTest.route) {
                 KnockTestScreen(
+                    inferenceEngine = inferenceEngine,
                     visualScanResult = visualScanResult,
                     onAnalyzeResult = { result ->
                         melonAssessmentResult = result
