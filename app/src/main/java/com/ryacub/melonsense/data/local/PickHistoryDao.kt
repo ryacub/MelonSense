@@ -14,6 +14,9 @@ interface PickHistoryDao {
     @Query("SELECT * FROM pick_history WHERE id = :pickId")
     suspend fun getById(pickId: Long): PickHistoryEntity?
 
+    @Query("SELECT * FROM pick_history ORDER BY createdAtMillis DESC")
+    suspend fun getAll(): List<PickHistoryEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: PickHistoryEntity): Long
 

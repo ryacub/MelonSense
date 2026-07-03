@@ -63,10 +63,57 @@ class TrainingRetentionRepositoryTest {
             assertEquals(TrainingExportStatus.Expired.name, pickHistoryDao.updatedStatus)
         }
 
+    @Test
+    fun purgeExpired_deletesExportedSourceArtifactsWithoutRegressingExportState() =
+        runTest {
+            val audioFile = temporaryFolder.newFile("exported-audio.pcm16.gz")
+            audioFile.writeBytes(byteArrayOf(1, 2, 3))
+            val trainingDao =
+                FakeTrainingCaptureDao(
+                    TrainingCaptureEntity(
+                        pickHistoryId = 8,
+                        exportStatus = TrainingExportStatus.Exported,
+                        exportedAtMillis = 2_500,
+                        createdAtMillis = 1_000,
+                        expiresAtMillis = 2_000,
+                        photoPath = null,
+                        photoMimeType = null,
+                        photoByteSize = null,
+                        photoCapturedAtMillis = null,
+                        photoLastModifiedAtMillis = null,
+                        photoWidth = null,
+                        photoHeight = null,
+                        audioPath = audioFile.absolutePath,
+                        audioMimeType = "audio/pcm16+gzip",
+                        audioByteSize = audioFile.length(),
+                        audioCapturedAtMillis = 1_000,
+                        audioLastModifiedAtMillis = 1_000,
+                        audioSampleRateHz = 16_000,
+                        audioDurationMillis = 250,
+                    ),
+                )
+            val pickHistoryDao = FakePickHistoryDao()
+            val repository =
+                TrainingRetentionRepository(
+                    trainingCaptureDao = trainingDao,
+                    pickHistoryDao = pickHistoryDao,
+                    mediaStore = FileTrainingMediaStore(temporaryFolder.root),
+                )
+
+            val purgedCount = repository.purgeExpired(nowMillis = 3_000)
+
+            assertEquals(1, purgedCount)
+            assertFalse(audioFile.exists())
+            assertEquals(8L, trainingDao.clearedArtifactsForPickId)
+            assertEquals(null, trainingDao.updatedStatus)
+            assertEquals(null, pickHistoryDao.updatedStatus)
+        }
+
     private class FakeTrainingCaptureDao(
         private val expiredCapture: TrainingCaptureEntity,
     ) : TrainingCaptureDao {
         var updatedStatus: String? = null
+        var clearedArtifactsForPickId: Long? = null
 
         override suspend fun getByPickHistoryId(pickHistoryId: Long): TrainingCaptureEntity? = expiredCapture
 
@@ -86,6 +133,10 @@ class TrainingRetentionRepositoryTest {
         ) {
             updatedStatus = exportStatus
         }
+
+        override suspend fun clearArtifacts(pickHistoryId: Long) {
+            clearedArtifactsForPickId = pickHistoryId
+        }
     }
 
     private class FakePickHistoryDao : PickHistoryDao {
@@ -94,6 +145,8 @@ class TrainingRetentionRepositoryTest {
         override fun observeHistory(): Flow<List<PickHistoryEntity>> = emptyFlow()
 
         override suspend fun getById(pickId: Long): PickHistoryEntity? = null
+
+        override suspend fun getAll(): List<PickHistoryEntity> = emptyList()
 
         override suspend fun insert(entity: PickHistoryEntity): Long = 0
 

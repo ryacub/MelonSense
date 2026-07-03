@@ -24,16 +24,20 @@ class TrainingRetentionRepository(
                     return@count false
                 }
                 runInTransaction {
-                    trainingCaptureDao.updateExportStatus(
-                        pickHistoryId = capture.pickHistoryId,
-                        exportStatus = TrainingExportStatus.Expired.name,
-                        exportedAtMillis = null,
-                    )
-                    pickHistoryDao.updateTrainingExportStatus(
-                        pickId = capture.pickHistoryId,
-                        trainingExportStatus = TrainingExportStatus.Expired.name,
-                        trainingExportedAtMillis = null,
-                    )
+                    if (capture.exportStatus == TrainingExportStatus.Exported) {
+                        trainingCaptureDao.clearArtifacts(capture.pickHistoryId)
+                    } else {
+                        trainingCaptureDao.updateExportStatus(
+                            pickHistoryId = capture.pickHistoryId,
+                            exportStatus = TrainingExportStatus.Expired.name,
+                            exportedAtMillis = null,
+                        )
+                        pickHistoryDao.updateTrainingExportStatus(
+                            pickId = capture.pickHistoryId,
+                            trainingExportStatus = TrainingExportStatus.Expired.name,
+                            trainingExportedAtMillis = null,
+                        )
+                    }
                 }
                 true
             }

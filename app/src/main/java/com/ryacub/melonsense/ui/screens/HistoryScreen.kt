@@ -32,11 +32,16 @@ import com.ryacub.melonsense.data.history.PickHistoryStatus
 import com.ryacub.melonsense.data.history.SweetnessRating
 import com.ryacub.melonsense.data.history.TextureRating
 import com.ryacub.melonsense.data.history.TrainingExportStatus
+import com.ryacub.melonsense.data.training.TrainingQueueBlockReason
+import com.ryacub.melonsense.data.training.TrainingQueueItem
 import com.ryacub.melonsense.domain.model.ResultLabel
 
 @Composable
 fun HistoryScreen(
     historyItems: List<PickHistoryItem>,
+    trainingQueueItems: List<TrainingQueueItem>,
+    lastDatasetExportPath: String?,
+    onExportTrainingDataset: () -> Unit,
     onSaveOutcome: (
         pickId: Long,
         resultLabel: ResultLabel,
@@ -77,6 +82,12 @@ fun HistoryScreen(
             return@Column
         }
 
+        TrainingQueueSection(
+            queueItems = trainingQueueItems,
+            lastDatasetExportPath = lastDatasetExportPath,
+            onExportTrainingDataset = onExportTrainingDataset,
+        )
+
         historyItems.forEach { item ->
             HistoryItemCard(
                 item = item,
@@ -91,6 +102,81 @@ fun HistoryScreen(
                 onSaveOutcome = onSaveOutcome,
             )
         }
+    }
+}
+
+@Composable
+private fun TrainingQueueSection(
+    queueItems: List<TrainingQueueItem>,
+    lastDatasetExportPath: String?,
+    onExportTrainingDataset: () -> Unit,
+) {
+    val eligibleCount = queueItems.count { item -> item.isEligible }
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.training_queue_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(R.string.training_queue_summary, eligibleCount, queueItems.size),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (queueItems.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.training_queue_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                queueItems.take(5).forEach { item ->
+                    TrainingQueueRow(item)
+                }
+            }
+            Button(
+                onClick = onExportTrainingDataset,
+                enabled = eligibleCount > 0,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.training_queue_export))
+            }
+            lastDatasetExportPath?.let { path ->
+                Text(
+                    text = stringResource(R.string.training_queue_last_export, path),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrainingQueueRow(item: TrainingQueueItem) {
+    val statusText =
+        if (item.isEligible) {
+            stringResource(R.string.training_queue_ready)
+        } else {
+            stringResource(R.string.training_queue_blocked, stringResource(item.blockReason.labelRes))
+        }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = stringResource(item.historyItem.resultLabel.labelRes),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = statusText,
+            style = MaterialTheme.typography.bodySmall,
+            color =
+                if (item.isEligible) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+        )
     }
 }
 
@@ -272,4 +358,15 @@ private val TrainingExportStatus.labelRes: Int
             TrainingExportStatus.Pending -> R.string.training_status_pending
             TrainingExportStatus.Exported -> R.string.training_status_exported
             TrainingExportStatus.Expired -> R.string.training_status_expired
+        }
+
+private val TrainingQueueBlockReason.labelRes: Int
+    get() =
+        when (this) {
+            TrainingQueueBlockReason.None -> R.string.training_block_none
+            TrainingQueueBlockReason.NeedsOutcome -> R.string.training_block_needs_outcome
+            TrainingQueueBlockReason.AlreadyExported -> R.string.training_block_already_exported
+            TrainingQueueBlockReason.ExpiredMedia -> R.string.training_block_expired_media
+            TrainingQueueBlockReason.MissingCapture -> R.string.training_block_missing_capture
+            TrainingQueueBlockReason.MissingArtifact -> R.string.training_block_missing_artifact
         }
