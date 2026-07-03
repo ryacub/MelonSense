@@ -251,6 +251,52 @@ class DatasetPipelineTest(unittest.TestCase):
                 records[0]["annotations"],
             )
 
+    def test_convert_yolo_detection_tree_accepts_polygon_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            raw_dir = repo_root / "datasets" / "raw" / "roboflow-saysay-ripe-unripe"
+            (raw_dir / "train" / "images").mkdir(parents=True)
+            (raw_dir / "train" / "labels").mkdir(parents=True)
+            image = raw_dir / "train" / "images" / "melon.jpg"
+            label = raw_dir / "train" / "labels" / "melon.txt"
+            image.write_bytes(b"image")
+            label.write_text("0 0.1 0.2 0.3 0.4 0.5 0.6\n", encoding="utf-8")
+            (raw_dir / "data.yaml").write_text(
+                "train: ../train/images\n"
+                "nc: 2\n"
+                "names: ['Ripe', 'unripe']\n",
+                encoding="utf-8",
+            )
+            (raw_dir / "source_metadata.json").write_text(
+                json.dumps(
+                    {
+                        "source_id": "roboflow-saysay-ripe-unripe",
+                        "source_url": "https://universe.roboflow.com/saysayroboflow/watermelon-ripe-semiripe-unripe",
+                        "license": "CC BY 4.0",
+                        "attribution": "Watermelon-Ripe-SemiRipe-UnRipe dataset by saysayroboflow on Roboflow Universe",
+                        "downloaded_date": "2026-07-03",
+                        "checksum_sha256": "abc123",
+                    },
+                ),
+                encoding="utf-8",
+            )
+
+            dataset_pipeline.convert_yolo_detection_tree(
+                repo_root=repo_root,
+                source_id="roboflow-saysay-ripe-unripe",
+                dataset_version="visual-ripeness-saysay-v0",
+            )
+
+            manifest_file = repo_root / "datasets" / "interim" / "visual-ripeness-saysay-v0" / "manifest.jsonl"
+            records = [json.loads(line) for line in manifest_file.read_text(encoding="utf-8").splitlines()]
+
+            self.assertEqual("Ripe", records[0]["source_label"])
+            self.assertEqual("ripe", records[0]["normalized_label"])
+            self.assertEqual(
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+                records[0]["annotations"][0]["polygon_yolo"],
+            )
+
 
 def write_manifest_records(
     manifest_file: Path,
