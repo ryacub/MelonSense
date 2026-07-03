@@ -29,6 +29,8 @@ import androidx.room.withTransaction
 import com.ryacub.melonsense.data.history.RoomHistoryRepository
 import com.ryacub.melonsense.data.local.MelonSenseDatabase
 import com.ryacub.melonsense.data.training.FileTrainingMediaStore
+import com.ryacub.melonsense.data.training.TrainingDatasetExportRepository
+import com.ryacub.melonsense.data.training.TrainingQueueItem
 import com.ryacub.melonsense.data.training.TrainingRetentionRepository
 import com.ryacub.melonsense.data.training.scheduleTrainingRetentionWork
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
@@ -39,6 +41,7 @@ import com.ryacub.melonsense.ui.screens.ResultScreen
 import com.ryacub.melonsense.ui.screens.ScanScreen
 import com.ryacub.melonsense.ui.screens.SettingsScreen
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +57,13 @@ fun MelonSenseApp() {
                 database = database,
             )
         }
+    val trainingDatasetExportRepository =
+        remember(database, context) {
+            TrainingDatasetExportRepository(
+                database = database,
+                outputDirectory = File(context.filesDir, "training-exports"),
+            )
+        }
     val trainingRetentionRepository =
         remember(database, mediaStore) {
             TrainingRetentionRepository(
@@ -66,6 +76,8 @@ fun MelonSenseApp() {
     val historyItems by historyRepository.historyItems.collectAsState(initial = emptyList())
     var visualScanResult by remember { mutableStateOf<VisualScanResult?>(null) }
     var melonAssessmentResult by remember { mutableStateOf<MelonAssessmentResult?>(null) }
+    var trainingQueueItems by remember { mutableStateOf<List<TrainingQueueItem>>(emptyList()) }
+    var lastDatasetExportPath by remember { mutableStateOf<String?>(null) }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val selectedDestination =
@@ -76,6 +88,10 @@ fun MelonSenseApp() {
     LaunchedEffect(trainingRetentionRepository) {
         scheduleTrainingRetentionWork(context)
         trainingRetentionRepository.purgeExpired(System.currentTimeMillis())
+    }
+
+    LaunchedEffect(historyItems, trainingDatasetExportRepository) {
+        trainingQueueItems = trainingDatasetExportRepository.getQueue(System.currentTimeMillis())
     }
 
     Scaffold(
@@ -148,6 +164,20 @@ fun MelonSenseApp() {
             composable(MelonSenseDestination.History.route) {
                 HistoryScreen(
                     historyItems = historyItems,
+                    trainingQueueItems = trainingQueueItems,
+                    lastDatasetExportPath = lastDatasetExportPath,
+                    onExportTrainingDataset = {
+                        coroutineScope.launch {
+                            val nowMillis = System.currentTimeMillis()
+                            val bundle =
+                                trainingDatasetExportRepository.exportEligible(
+                                    nowMillis = nowMillis,
+                                    createdAtMillis = nowMillis,
+                                )
+                            lastDatasetExportPath = bundle.manifestFile.absolutePath
+                            trainingQueueItems = trainingDatasetExportRepository.getQueue(System.currentTimeMillis())
+                        }
+                    },
                     onSaveOutcome = { pickId, resultLabel, sweetness, texture ->
                         coroutineScope.launch {
                             historyRepository.saveOutcome(

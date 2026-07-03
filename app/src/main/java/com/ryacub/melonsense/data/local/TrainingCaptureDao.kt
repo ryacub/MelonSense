@@ -14,7 +14,14 @@ interface TrainingCaptureDao {
     @Query("SELECT * FROM training_capture")
     suspend fun getAll(): List<TrainingCaptureEntity>
 
-    @Query("SELECT * FROM training_capture WHERE expiresAtMillis <= :nowMillis AND exportStatus != :expiredStatus")
+    @Query(
+        """
+        SELECT * FROM training_capture
+        WHERE expiresAtMillis <= :nowMillis
+            AND exportStatus != :expiredStatus
+            AND (photoPath IS NOT NULL OR audioPath IS NOT NULL)
+        """,
+    )
     suspend fun getExpired(
         nowMillis: Long,
         expiredStatus: String = TrainingExportStatus.Expired.name,
@@ -36,4 +43,26 @@ interface TrainingCaptureDao {
         exportStatus: String,
         exportedAtMillis: Long?,
     )
+
+    @Query(
+        """
+        UPDATE training_capture
+        SET photoPath = NULL,
+            photoMimeType = NULL,
+            photoByteSize = NULL,
+            photoCapturedAtMillis = NULL,
+            photoLastModifiedAtMillis = NULL,
+            photoWidth = NULL,
+            photoHeight = NULL,
+            audioPath = NULL,
+            audioMimeType = NULL,
+            audioByteSize = NULL,
+            audioCapturedAtMillis = NULL,
+            audioLastModifiedAtMillis = NULL,
+            audioSampleRateHz = NULL,
+            audioDurationMillis = NULL
+        WHERE pickHistoryId = :pickHistoryId
+        """,
+    )
+    suspend fun clearArtifacts(pickHistoryId: Long)
 }

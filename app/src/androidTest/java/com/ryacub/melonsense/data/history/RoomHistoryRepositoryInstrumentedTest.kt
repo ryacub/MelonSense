@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ryacub.melonsense.data.local.MelonSenseDatabase
+import com.ryacub.melonsense.data.training.TrainingDatasetExportRepository
 import com.ryacub.melonsense.data.training.TrainingExportRepository
 import com.ryacub.melonsense.domain.model.AudioScanResult
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
@@ -20,6 +21,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class RoomHistoryRepositoryInstrumentedTest {
@@ -149,6 +151,54 @@ class RoomHistoryRepositoryInstrumentedTest {
             reopenedDatabase.close()
         }
 
+    @Test
+    fun datasetExportWritesBundleAndMarksRowsExported() =
+        runBlocking {
+            val photoFile = File(context.cacheDir, "dataset-photo.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+            val audioFile = File(context.cacheDir, "dataset-audio.pcm16.gz").apply { writeBytes(byteArrayOf(4, 5, 6)) }
+            val database = openDatabase()
+            val historyRepository = RoomHistoryRepository(database)
+            val savedId =
+                historyRepository.savePickedAssessment(
+                    sampleAssessment(
+                        trainingMedia =
+                            sampleTrainingMedia(
+                                photoPath = photoFile.absolutePath,
+                                audioPath = audioFile.absolutePath,
+                            ),
+                    ),
+                )
+            historyRepository.saveOutcome(
+                pickId = savedId,
+                resultLabel = ResultLabel.StrongPick,
+                sweetness = SweetnessRating.VerySweet,
+                texture = TextureRating.Crisp,
+            )
+
+            val bundle =
+                TrainingDatasetExportRepository(
+                    database = database,
+                    outputDirectory = File(context.cacheDir, "dataset-exports"),
+                ).exportEligible(
+                    nowMillis = 1_788_100_000_000,
+                    createdAtMillis = 1_788_100_001_000,
+                )
+
+            val savedItem = historyRepository.getHistoryItem(savedId)
+            val trainingCapture = database.trainingCaptureDao().getByPickHistoryId(savedId)
+            assertEquals(1, bundle.entryCount)
+            assertEquals(true, bundle.manifestFile.exists())
+            assertNotNull(savedItem)
+            requireNotNull(savedItem)
+            assertEquals(TrainingExportStatus.Exported, savedItem.trainingExportStatus)
+            assertEquals(1_788_100_001_000, savedItem.trainingExportedAtMillis)
+            assertNotNull(trainingCapture)
+            requireNotNull(trainingCapture)
+            assertEquals(TrainingExportStatus.Exported, trainingCapture.exportStatus)
+            assertEquals(1_788_100_001_000, trainingCapture.exportedAtMillis)
+            database.close()
+        }
+
     private fun openDatabase(): MelonSenseDatabase =
         Room
             .databaseBuilder(
@@ -182,12 +232,15 @@ class RoomHistoryRepositoryInstrumentedTest {
             trainingMedia = trainingMedia,
         )
 
-    private fun sampleTrainingMedia(): PendingTrainingMedia =
+    private fun sampleTrainingMedia(
+        photoPath: String = "/tmp/photo.jpg",
+        audioPath: String = "/tmp/audio.pcm16.gz",
+    ): PendingTrainingMedia =
         PendingTrainingMedia(
             photoArtifact =
                 TrainingMediaArtifact(
                     kind = TrainingMediaKind.Photo,
-                    path = "/tmp/photo.jpg",
+                    path = photoPath,
                     mimeType = "image/jpeg",
                     byteSize = 100,
                     capturedAtMillis = 1_788_000_000_000,
@@ -200,7 +253,7 @@ class RoomHistoryRepositoryInstrumentedTest {
             audioArtifact =
                 TrainingMediaArtifact(
                     kind = TrainingMediaKind.Audio,
-                    path = "/tmp/audio.pcm16.gz",
+                    path = audioPath,
                     mimeType = "audio/pcm16+gzip",
                     byteSize = 80,
                     capturedAtMillis = 1_788_000_001_000,
