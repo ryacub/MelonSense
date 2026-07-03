@@ -76,6 +76,14 @@ python3 -m tools.datasets.dataset_pipeline convert-classification \
   --dataset-version visual-sweetness-v0
 ```
 
+Convert a YOLOv8 object-detection export into the normalized manifest:
+
+```sh
+python3 -m tools.datasets.dataset_pipeline convert-yolo-detection \
+  --source-id roboflow-fyp-ripeness \
+  --dataset-version visual-ripeness-fyp-v0
+```
+
 Generate local manifest stats:
 
 ```sh
