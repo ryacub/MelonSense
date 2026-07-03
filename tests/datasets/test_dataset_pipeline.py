@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools.datasets import dataset_pipeline
 
@@ -113,6 +114,93 @@ class DatasetPipelineTest(unittest.TestCase):
             (repo_root / ".gitignore").write_text("!/datasets/README.md\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "datasets"):
                 dataset_pipeline.validate_gitignore(repo_root)
+
+    def test_download_roboflow_export_uses_api_key_and_stages_returned_link(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+
+            with (
+                mock.patch.object(
+                    dataset_pipeline,
+                    "read_url_json",
+                    return_value={"export": {"link": "https://example.com/export.zip"}},
+                ) as read_url_json,
+                mock.patch.object(dataset_pipeline, "download_archive") as download_archive,
+            ):
+                download_archive.return_value = {"source_id": "roboflow-capstone-sweetness"}
+
+                result = dataset_pipeline.download_roboflow_export(
+                    repo_root=repo_root,
+                    source_id="roboflow-capstone-sweetness",
+                    api_key="secret-key",
+                    format_name="folder",
+                    archive_name="sweetness.zip",
+                    downloaded_date="2026-07-03",
+                )
+
+            request_url = read_url_json.call_args.args[0]
+            self.assertIn("capstonesementara/sweetness-watermelon/1/folder", request_url)
+            self.assertIn("api_key=secret-key", request_url)
+            download_archive.assert_called_once_with(
+                repo_root=repo_root,
+                source_id="roboflow-capstone-sweetness",
+                download_url="https://example.com/export.zip",
+                archive_name="sweetness.zip",
+                downloaded_date="2026-07-03",
+            )
+            self.assertEqual({"source_id": "roboflow-capstone-sweetness"}, result)
+
+    def test_manifest_stats_counts_labels_and_unknowns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            manifest_file = Path(tmp_dir) / "manifest.jsonl"
+            write_manifest_records(
+                manifest_file,
+                [
+                    {"normalized_label": "sweet", "source_label": "manis"},
+                    {"normalized_label": "not_sweet", "source_label": "tidak_manis"},
+                    {"normalized_label": "not_sweet", "source_label": "tidak_manis"},
+                    {"normalized_label": "unknown", "source_label": "unexpected"},
+                ],
+            )
+
+            stats = dataset_pipeline.manifest_stats(manifest_file)
+
+            self.assertEqual(4, stats["record_count"])
+            self.assertEqual({"sweet": 1, "not_sweet": 2, "unknown": 1}, stats["class_balance"])
+            self.assertEqual(1, stats["unknown_count"])
+            self.assertEqual(["unexpected"], stats["unknown_source_labels"])
+
+    def test_sample_audit_returns_examples_per_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            manifest_file = Path(tmp_dir) / "manifest.jsonl"
+            write_manifest_records(
+                manifest_file,
+                [
+                    {"normalized_label": "sweet", "image_path": "datasets/raw/source/train/manis/1.jpg"},
+                    {"normalized_label": "sweet", "image_path": "datasets/raw/source/train/manis/2.jpg"},
+                    {"normalized_label": "not_sweet", "image_path": "datasets/raw/source/train/tidak_manis/3.jpg"},
+                ],
+            )
+
+            audit = dataset_pipeline.sample_audit(manifest_file, samples_per_label=1)
+
+            self.assertEqual(
+                {
+                    "sweet": ["datasets/raw/source/train/manis/1.jpg"],
+                    "not_sweet": ["datasets/raw/source/train/tidak_manis/3.jpg"],
+                },
+                audit["samples"],
+            )
+
+
+def write_manifest_records(
+    manifest_file: Path,
+    records: list[dict[str, object]],
+) -> None:
+    manifest_file.write_text(
+        "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

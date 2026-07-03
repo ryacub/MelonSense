@@ -3,9 +3,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
+import urllib.parse
 import urllib.request
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -21,6 +24,9 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 class DatasetSource:
     source_id: str
     source_url: str
+    roboflow_workspace: str
+    roboflow_project: str
+    roboflow_version: int
     license: str
     attribution: str
     source_labels: dict[str, str]
@@ -31,6 +37,9 @@ APPROVED_SOURCES: dict[str, DatasetSource] = {
     "roboflow-capstone-sweetness": DatasetSource(
         source_id="roboflow-capstone-sweetness",
         source_url="https://universe.roboflow.com/capstonesementara/sweetness-watermelon",
+        roboflow_workspace="capstonesementara",
+        roboflow_project="sweetness-watermelon",
+        roboflow_version=1,
         license="CC BY 4.0",
         attribution="Sweetness Watermelon dataset by capstonesementara on Roboflow Universe",
         source_labels={
@@ -42,6 +51,9 @@ APPROVED_SOURCES: dict[str, DatasetSource] = {
     "roboflow-fyp-ripeness": DatasetSource(
         source_id="roboflow-fyp-ripeness",
         source_url="https://universe.roboflow.com/fyp-bkvhr/watermelon-ripeness-grading",
+        roboflow_workspace="fyp-bkvhr",
+        roboflow_project="watermelon-ripeness-grading",
+        roboflow_version=1,
         license="CC BY 4.0",
         attribution="Watermelon Ripeness Grading dataset by FYP on Roboflow Universe",
         source_labels={
@@ -104,6 +116,40 @@ def download_archive(
     )
 
 
+def download_roboflow_export(
+    *,
+    repo_root: Path,
+    source_id: str,
+    api_key: str,
+    format_name: str = "folder",
+    archive_name: str | None = None,
+    downloaded_date: str | None = None,
+) -> dict[str, Any]:
+    source = require_approved_source(source_id)
+    if not api_key:
+        raise ValueError("Roboflow API key is required")
+    api_url = (
+        "https://api.roboflow.com/{workspace}/{project}/{version}/{format_name}?api_key={api_key}"
+    ).format(
+        workspace=urllib.parse.quote(source.roboflow_workspace, safe=""),
+        project=urllib.parse.quote(source.roboflow_project, safe=""),
+        version=source.roboflow_version,
+        format_name=urllib.parse.quote(format_name, safe=""),
+        api_key=urllib.parse.quote(api_key, safe=""),
+    )
+    payload = read_url_json(api_url)
+    export_link = payload.get("export", {}).get("link")
+    if not export_link:
+        raise ValueError("Roboflow export response did not include export.link")
+    return download_archive(
+        repo_root=repo_root,
+        source_id=source_id,
+        download_url=export_link,
+        archive_name=archive_name or f"{source_id}.zip",
+        downloaded_date=downloaded_date,
+    )
+
+
 def convert_classification_tree(
     *,
     repo_root: Path,
@@ -133,6 +179,46 @@ def convert_classification_tree(
     }
     write_json(output_dir / "manifest_metadata.json", manifest_summary)
     return manifest_summary
+
+
+def manifest_stats(manifest_file: Path) -> dict[str, Any]:
+    records = read_manifest_records(manifest_file)
+    label_counter = Counter(record.get("normalized_label", "unknown") for record in records)
+    unknown_source_labels = sorted(
+        {
+            str(record.get("source_label", "unknown"))
+            for record in records
+            if record.get("normalized_label") == "unknown"
+        },
+    )
+    return {
+        "manifest_path": manifest_file.as_posix(),
+        "record_count": len(records),
+        "class_balance": dict(sorted(label_counter.items())),
+        "unknown_count": label_counter.get("unknown", 0),
+        "unknown_source_labels": unknown_source_labels,
+    }
+
+
+def sample_audit(
+    manifest_file: Path,
+    samples_per_label: int = 5,
+) -> dict[str, Any]:
+    if samples_per_label < 1:
+        raise ValueError("samples_per_label must be at least 1")
+    samples: dict[str, list[str]] = defaultdict(list)
+    for record in read_manifest_records(manifest_file):
+        label = str(record.get("normalized_label", "unknown"))
+        if len(samples[label]) >= samples_per_label:
+            continue
+        image_path = record.get("image_path")
+        if isinstance(image_path, str):
+            samples[label].append(image_path)
+    return {
+        "manifest_path": manifest_file.as_posix(),
+        "samples_per_label": samples_per_label,
+        "samples": dict(sorted(samples.items())),
+    }
 
 
 def validate_gitignore(repo_root: Path) -> None:
@@ -245,6 +331,29 @@ def read_required_metadata(raw_dir: Path) -> dict[str, Any]:
     return metadata
 
 
+def read_manifest_records(manifest_file: Path) -> list[dict[str, Any]]:
+    if not manifest_file.exists():
+        raise FileNotFoundError(f"Manifest does not exist: {manifest_file}")
+    records: list[dict[str, Any]] = []
+    with manifest_file.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if not isinstance(record, dict):
+                raise ValueError(f"Manifest line {line_number} is not an object")
+            records.append(record)
+    return records
+
+
+def read_url_json(url: str) -> dict[str, Any]:
+    with urllib.request.urlopen(url) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Expected JSON object response")
+    return payload
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -276,9 +385,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     download_parser.add_argument("--archive-name")
     download_parser.add_argument("--downloaded-date")
 
+    roboflow_parser = subparsers.add_parser("download-roboflow")
+    roboflow_parser.add_argument("--source-id", required=True)
+    roboflow_parser.add_argument("--format", default="folder", dest="format_name")
+    roboflow_parser.add_argument("--archive-name")
+    roboflow_parser.add_argument("--downloaded-date")
+    roboflow_parser.add_argument("--api-key-env", default="ROBOFLOW_API_KEY")
+
     convert_parser = subparsers.add_parser("convert-classification")
     convert_parser.add_argument("--source-id", required=True)
     convert_parser.add_argument("--dataset-version", required=True)
+
+    stats_parser = subparsers.add_parser("manifest-stats")
+    stats_parser.add_argument("--manifest", type=Path, required=True)
+
+    audit_parser = subparsers.add_parser("sample-audit")
+    audit_parser.add_argument("--manifest", type=Path, required=True)
+    audit_parser.add_argument("--samples-per-label", type=int, default=5)
 
     subparsers.add_parser("validate-gitignore")
     return parser.parse_args(argv)
@@ -303,11 +426,30 @@ def main(argv: list[str] | None = None) -> int:
             archive_name=args.archive_name,
             downloaded_date=args.downloaded_date,
         )
+    elif args.command == "download-roboflow":
+        api_key = os.environ.get(args.api_key_env, "")
+        if not api_key:
+            raise ValueError(f"Environment variable is missing: {args.api_key_env}")
+        result = download_roboflow_export(
+            repo_root=repo_root,
+            source_id=args.source_id,
+            api_key=api_key,
+            format_name=args.format_name,
+            archive_name=args.archive_name,
+            downloaded_date=args.downloaded_date,
+        )
     elif args.command == "convert-classification":
         result = convert_classification_tree(
             repo_root=repo_root,
             source_id=args.source_id,
             dataset_version=args.dataset_version,
+        )
+    elif args.command == "manifest-stats":
+        result = manifest_stats(args.manifest)
+    elif args.command == "sample-audit":
+        result = sample_audit(
+            manifest_file=args.manifest,
+            samples_per_label=args.samples_per_label,
         )
     elif args.command == "validate-gitignore":
         validate_gitignore(repo_root)
