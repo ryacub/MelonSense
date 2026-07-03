@@ -6,6 +6,7 @@ import com.ryacub.melonsense.data.history.PickHistoryItem
 import com.ryacub.melonsense.data.history.PickHistoryStatus
 import com.ryacub.melonsense.data.history.SweetnessRating
 import com.ryacub.melonsense.data.history.TextureRating
+import com.ryacub.melonsense.data.history.TrainingExportStatus
 import com.ryacub.melonsense.domain.model.ResultLabel
 
 @Entity(tableName = "pick_history")
@@ -24,6 +25,8 @@ data class PickHistoryEntity(
     val validKnocks: Int,
     val estimatedFrequencyHz: Int,
     val finalConfidencePercent: Int,
+    val trainingExportStatus: TrainingExportStatus,
+    val trainingExportedAtMillis: Long?,
 )
 
 fun PickHistoryEntity.toHistoryItem(): PickHistoryItem =
@@ -41,6 +44,8 @@ fun PickHistoryEntity.toHistoryItem(): PickHistoryItem =
         validKnocks = validKnocks,
         estimatedFrequencyHz = estimatedFrequencyHz,
         finalConfidencePercent = finalConfidencePercent,
+        trainingExportStatus = trainingExportStatus,
+        trainingExportedAtMillis = trainingExportedAtMillis,
     )
 
 fun PickHistoryItem.toEntity(): PickHistoryEntity =
@@ -58,4 +63,6 @@ fun PickHistoryItem.toEntity(): PickHistoryEntity =
         validKnocks = validKnocks,
         estimatedFrequencyHz = estimatedFrequencyHz,
         finalConfidencePercent = finalConfidencePercent,
+        trainingExportStatus = trainingExportStatus,
+        trainingExportedAtMillis = trainingExportedAtMillis,
     )

@@ -34,4 +34,18 @@ interface PickHistoryDao {
         sweetness: String,
         texture: String,
     )
+
+    @Query(
+        """
+        UPDATE pick_history
+        SET trainingExportStatus = :trainingExportStatus,
+            trainingExportedAtMillis = :trainingExportedAtMillis
+        WHERE id = :pickId
+        """,
+    )
+    suspend fun updateTrainingExportStatus(
+        pickId: Long,
+        trainingExportStatus: String,
+        trainingExportedAtMillis: Long?,
+    )
 }

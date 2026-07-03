@@ -24,6 +24,13 @@ enum class TextureRating {
     VeryCrisp,
 }
 
+enum class TrainingExportStatus {
+    NotCaptured,
+    Pending,
+    Exported,
+    Expired,
+}
+
 data class PickHistoryItem(
     val id: Long,
     val createdAtMillis: Long,
@@ -38,4 +45,6 @@ data class PickHistoryItem(
     val validKnocks: Int,
     val estimatedFrequencyHz: Int,
     val finalConfidencePercent: Int,
+    val trainingExportStatus: TrainingExportStatus,
+    val trainingExportedAtMillis: Long?,
 )

@@ -17,4 +17,11 @@ fun MelonAssessmentResult.toPendingHistoryItem(id: Long): PickHistoryItem =
         validKnocks = audioScanResult.validKnocks,
         estimatedFrequencyHz = audioScanResult.estimatedFrequencyHz,
         finalConfidencePercent = confidencePercent,
+        trainingExportStatus =
+            if (trainingMedia != null) {
+                TrainingExportStatus.Pending
+            } else {
+                TrainingExportStatus.NotCaptured
+            },
+        trainingExportedAtMillis = null,
     )

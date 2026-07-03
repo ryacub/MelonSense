@@ -7,4 +7,5 @@ data class AudioScanResult(
     val estimatedFrequencyHz: Int,
     val capturedAtMillis: Long,
     val evidence: List<String>,
+    val audioArtifact: TrainingMediaArtifact? = null,
 )

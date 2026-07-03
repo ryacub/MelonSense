@@ -1,6 +1,7 @@
 package com.ryacub.melonsense.data.history
 
-import com.ryacub.melonsense.data.local.PickHistoryDao
+import androidx.room.withTransaction
+import com.ryacub.melonsense.data.local.MelonSenseDatabase
 import com.ryacub.melonsense.data.local.toEntity
 import com.ryacub.melonsense.data.local.toHistoryItem
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
@@ -9,19 +10,29 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RoomHistoryRepository(
-    private val pickHistoryDao: PickHistoryDao,
+    private val database: MelonSenseDatabase,
 ) : HistoryRepository {
+    private val pickHistoryDao = database.pickHistoryDao()
+    private val trainingCaptureDao = database.trainingCaptureDao()
+
     override val historyItems: Flow<List<PickHistoryItem>> =
         pickHistoryDao.observeHistory().map { entities ->
             entities.map { entity -> entity.toHistoryItem() }
         }
 
     override suspend fun savePickedAssessment(assessmentResult: MelonAssessmentResult): Long =
-        pickHistoryDao.insert(
-            assessmentResult
-                .toPendingHistoryItem(id = 0)
-                .toEntity(),
-        )
+        database.withTransaction {
+            val pickHistoryId =
+                pickHistoryDao.insert(
+                    assessmentResult
+                        .toPendingHistoryItem(id = 0)
+                        .toEntity(),
+                )
+            assessmentResult.trainingMedia?.let { trainingMedia ->
+                trainingCaptureDao.insert(trainingMedia.toEntity(pickHistoryId))
+            }
+            pickHistoryId
+        }
 
     override suspend fun saveOutcome(
         pickId: Long,

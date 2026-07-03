@@ -9,6 +9,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,8 +25,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.room.withTransaction
 import com.ryacub.melonsense.data.history.RoomHistoryRepository
 import com.ryacub.melonsense.data.local.MelonSenseDatabase
+import com.ryacub.melonsense.data.training.FileTrainingMediaStore
+import com.ryacub.melonsense.data.training.TrainingRetentionRepository
+import com.ryacub.melonsense.data.training.scheduleTrainingRetentionWork
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import com.ryacub.melonsense.ui.screens.HistoryScreen
@@ -41,10 +46,21 @@ fun MelonSenseApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
+    val database = remember(context) { MelonSenseDatabase.getInstance(context) }
+    val mediaStore = remember(context) { FileTrainingMediaStore(context) }
     val historyRepository =
-        remember(context) {
+        remember(database) {
             RoomHistoryRepository(
-                MelonSenseDatabase.getInstance(context).pickHistoryDao(),
+                database = database,
+            )
+        }
+    val trainingRetentionRepository =
+        remember(database, mediaStore) {
+            TrainingRetentionRepository(
+                trainingCaptureDao = database.trainingCaptureDao(),
+                pickHistoryDao = database.pickHistoryDao(),
+                mediaStore = mediaStore,
+                runInTransaction = { block -> database.withTransaction { block() } },
             )
         }
     val historyItems by historyRepository.historyItems.collectAsState(initial = emptyList())
@@ -56,6 +72,11 @@ fun MelonSenseApp() {
         MelonSenseDestination.entries.firstOrNull { destination ->
             currentDestination?.hierarchy?.any { it.route == destination.route } == true
         } ?: MelonSenseDestination.Scan
+
+    LaunchedEffect(trainingRetentionRepository) {
+        scheduleTrainingRetentionWork(context)
+        trainingRetentionRepository.purgeExpired(System.currentTimeMillis())
+    }
 
     Scaffold(
         topBar = {

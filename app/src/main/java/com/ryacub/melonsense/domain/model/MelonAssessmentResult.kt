@@ -6,4 +6,5 @@ data class MelonAssessmentResult(
     val recommendation: String,
     val resultLabel: ResultLabel,
     val confidencePercent: Int,
+    val trainingMedia: PendingTrainingMedia? = null,
 )

@@ -5,4 +5,5 @@ data class VisualScanResult(
     val confidencePercent: Int,
     val capturedAtMillis: Long,
     val evidence: List<String>,
+    val photoArtifact: TrainingMediaArtifact? = null,
 )

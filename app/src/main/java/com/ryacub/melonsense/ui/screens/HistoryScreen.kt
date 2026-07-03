@@ -31,6 +31,7 @@ import com.ryacub.melonsense.data.history.PickHistoryItem
 import com.ryacub.melonsense.data.history.PickHistoryStatus
 import com.ryacub.melonsense.data.history.SweetnessRating
 import com.ryacub.melonsense.data.history.TextureRating
+import com.ryacub.melonsense.data.history.TrainingExportStatus
 import com.ryacub.melonsense.domain.model.ResultLabel
 
 @Composable
@@ -116,6 +117,10 @@ private fun HistoryItemCard(
             )
             Text(
                 text = stringResource(R.string.history_scores, item.visualScore ?: 0, item.audioScore),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(R.string.history_training_status, stringResource(item.trainingExportStatus.labelRes)),
                 style = MaterialTheme.typography.bodyMedium,
             )
             OutlinedButton(onClick = onSelect) {
@@ -258,4 +263,13 @@ private val TextureRating.labelRes: Int
             TextureRating.Okay -> R.string.texture_okay
             TextureRating.Crisp -> R.string.texture_crisp
             TextureRating.VeryCrisp -> R.string.texture_very_crisp
+        }
+
+private val TrainingExportStatus.labelRes: Int
+    get() =
+        when (this) {
+            TrainingExportStatus.NotCaptured -> R.string.training_status_not_captured
+            TrainingExportStatus.Pending -> R.string.training_status_pending
+            TrainingExportStatus.Exported -> R.string.training_status_exported
+            TrainingExportStatus.Expired -> R.string.training_status_expired
         }

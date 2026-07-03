@@ -46,6 +46,7 @@
     <string name="history_body">Pending Outcome, Rated, and Expired Media entries will appear here.</string>
     <string name="history_empty">Picked melons will appear here after you tap I Picked This.</string>
     <string name="history_scores">Visual %1$d / Audio %2$d</string>
+    <string name="history_training_status">Training: %1$s</string>
     <string name="history_edit_outcome">Edit Outcome</string>
     <string name="history_editing">Editing</string>
     <string name="history_outcome_title">Outcome</string>
@@ -70,6 +71,10 @@
     <string name="texture_okay">Okay</string>
     <string name="texture_crisp">Crisp</string>
     <string name="texture_very_crisp">Very Crisp</string>
+    <string name="training_status_not_captured">Not Captured</string>
+    <string name="training_status_pending">Pending Export</string>
+    <string name="training_status_exported">Exported</string>
+    <string name="training_status_expired">Expired</string>
     <string name="settings_headline">App settings</string>
     <string name="settings_body">Training capture, retention, and model settings will appear here.</string>
     <string name="placeholder_confidence">Confidence placeholder</string>

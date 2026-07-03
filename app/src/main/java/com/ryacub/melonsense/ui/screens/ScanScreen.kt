@@ -1,10 +1,13 @@
 package com.ryacub.melonsense.ui.screens
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.border
@@ -36,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,11 +52,26 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ryacub.melonsense.R
+import com.ryacub.melonsense.data.training.FileTrainingMediaStore
+import com.ryacub.melonsense.domain.model.TrainingMediaArtifact
 import com.ryacub.melonsense.domain.model.VisualScanResult
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @Composable
 fun ScanScreen(onStartKnockTest: (VisualScanResult) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val mediaStore = remember(context) { FileTrainingMediaStore(context) }
+    val cameraController =
+        remember {
+            LifecycleCameraController(context).apply {
+                cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                setEnabledUseCases(LifecycleCameraController.IMAGE_CAPTURE)
+            }
+        }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -75,9 +94,22 @@ fun ScanScreen(onStartKnockTest: (VisualScanResult) -> Unit) {
 
     if (hasCameraPermission) {
         ScanContent(
+            cameraController = cameraController,
             visualScanResult = visualScanResult,
             onCaptureFrame = {
-                visualScanResult = createPlaceholderVisualResult()
+                scope.launch {
+                    visualScanResult =
+                        createPlaceholderVisualResult(
+                            photoArtifact =
+                                runCatching {
+                                    capturePhotoArtifact(
+                                        context = context,
+                                        cameraController = cameraController,
+                                        mediaStore = mediaStore,
+                                    )
+                                }.getOrNull(),
+                        )
+                }
             },
             onStartKnockTest = {
                 onStartKnockTest(visualScanResult ?: createPlaceholderVisualResult())
@@ -94,6 +126,7 @@ fun ScanScreen(onStartKnockTest: (VisualScanResult) -> Unit) {
 
 @Composable
 private fun ScanContent(
+    cameraController: LifecycleCameraController,
     visualScanResult: VisualScanResult?,
     onCaptureFrame: () -> Unit,
     onStartKnockTest: () -> Unit,
@@ -112,7 +145,10 @@ private fun ScanContent(
                     .weight(1f)
                     .clip(RoundedCornerShape(8.dp)),
         ) {
-            CameraPreview(modifier = Modifier.fillMaxSize())
+            CameraPreview(
+                cameraController = cameraController,
+                modifier = Modifier.fillMaxSize(),
+            )
             FramingOverlay(modifier = Modifier.fillMaxSize())
         }
 
@@ -146,16 +182,11 @@ private fun ScanContent(
 }
 
 @Composable
-private fun CameraPreview(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
+private fun CameraPreview(
+    cameraController: LifecycleCameraController,
+    modifier: Modifier = Modifier,
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraController =
-        remember {
-            LifecycleCameraController(context).apply {
-                cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-                setEnabledUseCases(LifecycleCameraController.IMAGE_CAPTURE)
-            }
-        }
 
     DisposableEffect(lifecycleOwner, cameraController) {
         cameraController.bindToLifecycle(lifecycleOwner)
@@ -282,7 +313,33 @@ private fun CameraPermissionContent(onRequestPermission: () -> Unit) {
     }
 }
 
-private fun createPlaceholderVisualResult(): VisualScanResult =
+private suspend fun capturePhotoArtifact(
+    context: Context,
+    cameraController: LifecycleCameraController,
+    mediaStore: FileTrainingMediaStore,
+): TrainingMediaArtifact {
+    val capturedAtMillis = System.currentTimeMillis()
+    val photoFile = mediaStore.createPhotoArtifactFile(capturedAtMillis)
+    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+    suspendCancellableCoroutine<Unit> { continuation ->
+        cameraController.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    continuation.resume(Unit)
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    continuation.resumeWithException(exception)
+                }
+            },
+        )
+    }
+    return mediaStore.readPhotoArtifactMetadata(photoFile, capturedAtMillis)
+}
+
+private fun createPlaceholderVisualResult(photoArtifact: TrainingMediaArtifact? = null): VisualScanResult =
     VisualScanResult(
         score = 72,
         confidencePercent = 64,
@@ -293,4 +350,5 @@ private fun createPlaceholderVisualResult(): VisualScanResult =
                 "Shape and surface scoring placeholder",
                 "Ready for knock-test refinement",
             ),
+        photoArtifact = photoArtifact,
     )

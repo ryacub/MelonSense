@@ -2,7 +2,10 @@ package com.ryacub.melonsense.data.history
 
 import com.ryacub.melonsense.domain.model.AudioScanResult
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
+import com.ryacub.melonsense.domain.model.PendingTrainingMedia
 import com.ryacub.melonsense.domain.model.ResultLabel
+import com.ryacub.melonsense.domain.model.TrainingMediaArtifact
+import com.ryacub.melonsense.domain.model.TrainingMediaKind
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -24,6 +27,20 @@ class HistoryRepositoryTest {
             assertEquals(72, savedItem.visualScore)
             assertEquals(81, savedItem.audioScore)
             assertEquals(ResultLabel.GoodCandidate, savedItem.resultLabel)
+            assertEquals(TrainingExportStatus.NotCaptured, savedItem.trainingExportStatus)
+        }
+
+    @Test
+    fun savePickedAssessment_marksTrainingExportPendingWhenMediaIsAttached() =
+        runTest {
+            val repository = InMemoryHistoryRepository()
+
+            val savedId = repository.savePickedAssessment(sampleAssessment(trainingMedia = sampleTrainingMedia()))
+            val savedItem = repository.getHistoryItem(savedId)
+
+            assertNotNull(savedItem)
+            requireNotNull(savedItem)
+            assertEquals(TrainingExportStatus.Pending, savedItem.trainingExportStatus)
         }
 
     @Test
@@ -67,7 +84,7 @@ class HistoryRepositoryTest {
             assertEquals(TextureRating.Crisp, savedItem.texture)
         }
 
-    private fun sampleAssessment(): MelonAssessmentResult =
+    private fun sampleAssessment(trainingMedia: PendingTrainingMedia? = null): MelonAssessmentResult =
         MelonAssessmentResult(
             visualScanResult =
                 VisualScanResult(
@@ -88,5 +105,38 @@ class HistoryRepositoryTest {
             recommendation = "Good Candidate",
             resultLabel = ResultLabel.GoodCandidate,
             confidencePercent = 77,
+            trainingMedia = trainingMedia,
+        )
+
+    private fun sampleTrainingMedia(): PendingTrainingMedia =
+        PendingTrainingMedia(
+            photoArtifact =
+                TrainingMediaArtifact(
+                    kind = TrainingMediaKind.Photo,
+                    path = "/tmp/photo.jpg",
+                    mimeType = "image/jpeg",
+                    byteSize = 100,
+                    capturedAtMillis = 1_788_000_000_000,
+                    lastModifiedAtMillis = 1_788_000_000_100,
+                    width = 640,
+                    height = 480,
+                    sampleRateHz = null,
+                    durationMillis = null,
+                ),
+            audioArtifact =
+                TrainingMediaArtifact(
+                    kind = TrainingMediaKind.Audio,
+                    path = "/tmp/audio.pcm16.gz",
+                    mimeType = "audio/pcm16+gzip",
+                    byteSize = 80,
+                    capturedAtMillis = 1_788_000_001_000,
+                    lastModifiedAtMillis = 1_788_000_001_100,
+                    width = null,
+                    height = null,
+                    sampleRateHz = 16_000,
+                    durationMillis = 750,
+                ),
+            createdAtMillis = 1_788_000_002_000,
+            expiresAtMillis = 1_789_209_602_000,
         )
 }

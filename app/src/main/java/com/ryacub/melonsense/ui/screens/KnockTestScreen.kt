@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioRecord.RECORDSTATE_RECORDING
 import android.media.MediaRecorder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,10 +44,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.ryacub.melonsense.R
+import com.ryacub.melonsense.data.training.FileTrainingMediaStore
+import com.ryacub.melonsense.data.training.TRAINING_MEDIA_RETENTION_MILLIS
 import com.ryacub.melonsense.domain.audio.KnockAudioAnalyzer
 import com.ryacub.melonsense.domain.model.AudioScanResult
 import com.ryacub.melonsense.domain.model.KnockCapture
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
+import com.ryacub.melonsense.domain.model.PendingTrainingMedia
 import com.ryacub.melonsense.domain.model.ResultLabel
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +64,7 @@ fun KnockTestScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val mediaStore = remember(context) { FileTrainingMediaStore(context) }
     val recommendation = stringResource(R.string.result_headline)
     var hasAudioPermission by remember {
         mutableStateOf(
@@ -71,7 +76,8 @@ fun KnockTestScreen(
     }
     var isRecording by remember { mutableStateOf(false) }
     var lastCapture by remember { mutableStateOf<KnockCapture?>(null) }
-    val validKnocks = remember { mutableStateListOf<KnockCapture>() }
+    val validKnockWindows = remember { mutableStateListOf<CapturedKnockWindow>() }
+    val validKnocks = validKnockWindows.map { window -> window.capture }
     val permissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             hasAudioPermission = granted
@@ -98,28 +104,48 @@ fun KnockTestScreen(
         lastCapture = lastCapture,
         isRecording = isRecording,
         onCaptureKnock = {
-            if (isRecording || validKnocks.size >= KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
+            if (isRecording || validKnockWindows.size >= KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
                 return@KnockTestContent
             }
             scope.launch {
                 isRecording = true
-                val capture = captureKnockWindow()
-                lastCapture = capture
-                if (capture.isValid && validKnocks.size < KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
-                    validKnocks += capture
+                val window = captureKnockWindow()
+                lastCapture = window.capture
+                if (window.capture.isValid && validKnockWindows.size < KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
+                    validKnockWindows += window
                 }
                 isRecording = false
             }
         },
         onAnalyzeResult = {
-            val audioScanResult = KnockAudioAnalyzer.buildAudioScanResult(validKnocks)
-            onAnalyzeResult(
-                buildAssessmentResult(
-                    visualScanResult = visualScanResult,
-                    audioScanResult = audioScanResult,
-                    recommendation = recommendation,
-                ),
-            )
+            scope.launch {
+                val capturedAtMillis = System.currentTimeMillis()
+                val audioArtifact =
+                    mediaStore.saveCompressedAudioArtifact(
+                        samples = validKnockWindows.concatSamples(),
+                        sampleRateHz = KnockAudioAnalyzer.SAMPLE_RATE_HZ,
+                        capturedAtMillis = capturedAtMillis,
+                    )
+                val audioScanResult =
+                    KnockAudioAnalyzer
+                        .buildAudioScanResult(validKnocks)
+                        .copy(audioArtifact = audioArtifact)
+                val trainingMedia =
+                    PendingTrainingMedia(
+                        photoArtifact = visualScanResult?.photoArtifact,
+                        audioArtifact = audioArtifact,
+                        createdAtMillis = capturedAtMillis,
+                        expiresAtMillis = capturedAtMillis + TRAINING_MEDIA_RETENTION_MILLIS,
+                    )
+                onAnalyzeResult(
+                    buildAssessmentResult(
+                        visualScanResult = visualScanResult,
+                        audioScanResult = audioScanResult,
+                        recommendation = recommendation,
+                        trainingMedia = trainingMedia,
+                    ),
+                )
+            }
         },
     )
 }
@@ -325,7 +351,7 @@ private fun MicrophonePermissionContent(onRequestPermission: () -> Unit) {
 }
 
 @SuppressLint("MissingPermission")
-private suspend fun captureKnockWindow(): KnockCapture =
+private suspend fun captureKnockWindow(): CapturedKnockWindow =
     withContext(Dispatchers.IO) {
         val minBufferSize =
             AudioRecord.getMinBufferSize(
@@ -360,18 +386,31 @@ private suspend fun captureKnockWindow(): KnockCapture =
                 samplesRead += read
             }
         } finally {
-            audioRecord.stop()
+            if (audioRecord.recordingState == RECORDSTATE_RECORDING) {
+                runCatching { audioRecord.stop() }
+            }
             audioRecord.release()
         }
 
         val capturedSamples = samples.copyOf(samplesRead)
-        KnockAudioAnalyzer.analyzeSamples(capturedSamples)
+        CapturedKnockWindow(
+            capture = KnockAudioAnalyzer.analyzeSamples(capturedSamples),
+            samples = capturedSamples,
+            capturedAtMillis = System.currentTimeMillis(),
+        )
     }
+
+private data class CapturedKnockWindow(
+    val capture: KnockCapture,
+    val samples: ShortArray,
+    val capturedAtMillis: Long,
+)
 
 private fun buildAssessmentResult(
     visualScanResult: VisualScanResult?,
     audioScanResult: AudioScanResult,
     recommendation: String,
+    trainingMedia: PendingTrainingMedia?,
 ): MelonAssessmentResult {
     val visualConfidence = visualScanResult?.confidencePercent ?: 0
     val finalConfidence =
@@ -385,5 +424,20 @@ private fun buildAssessmentResult(
         recommendation = recommendation,
         resultLabel = ResultLabel.GoodCandidate,
         confidencePercent = finalConfidence,
+        trainingMedia = trainingMedia,
     )
+}
+
+private fun List<CapturedKnockWindow>.concatSamples(): ShortArray {
+    val totalSize = sumOf { window -> window.samples.size }
+    val combined = ShortArray(totalSize)
+    var offset = 0
+    forEach { window ->
+        window.samples.copyInto(
+            destination = combined,
+            destinationOffset = offset,
+        )
+        offset += window.samples.size
+    }
+    return combined
 }
