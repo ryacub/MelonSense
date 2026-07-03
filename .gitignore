@@ -8,3 +8,9 @@
 
 # Local git worktrees
 .worktrees/
+
+# Local datasets and model-training artifacts. Keep README.md tracked.
+/datasets/*
+!/datasets/README.md
+/training-runs/
+/models/local/
