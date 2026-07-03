@@ -98,6 +98,19 @@ APPROVED_SOURCES: dict[str, DatasetSource] = {
         },
         task_type="object_detection",
     ),
+    "fruits-360-watermelon": DatasetSource(
+        source_id="fruits-360-watermelon",
+        source_url="https://github.com/Horea94/Fruit-Images-Dataset",
+        roboflow_workspace="",
+        roboflow_project="",
+        roboflow_version=0,
+        license="MIT",
+        attribution="Fruits-360 dataset by Horea94 / fruits-360 on GitHub",
+        source_labels={
+            "Watermelon": "watermelon_generic",
+        },
+        task_type="classification",
+    ),
 }
 
 
