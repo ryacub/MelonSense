@@ -53,6 +53,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ryacub.melonsense.R
 import com.ryacub.melonsense.data.training.FileTrainingMediaStore
+import com.ryacub.melonsense.domain.inference.MelonInferenceEngine
+import com.ryacub.melonsense.domain.inference.VisualInferenceInput
 import com.ryacub.melonsense.domain.model.TrainingMediaArtifact
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import kotlinx.coroutines.launch
@@ -61,7 +63,10 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 @Composable
-fun ScanScreen(onStartKnockTest: (VisualScanResult) -> Unit) {
+fun ScanScreen(
+    inferenceEngine: MelonInferenceEngine,
+    onStartKnockTest: (VisualScanResult) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
@@ -99,20 +104,22 @@ fun ScanScreen(onStartKnockTest: (VisualScanResult) -> Unit) {
             onCaptureFrame = {
                 scope.launch {
                     visualScanResult =
-                        createPlaceholderVisualResult(
-                            photoArtifact =
-                                runCatching {
-                                    capturePhotoArtifact(
-                                        context = context,
-                                        cameraController = cameraController,
-                                        mediaStore = mediaStore,
-                                    )
-                                }.getOrNull(),
+                        inferenceEngine.scoreVisual(
+                            VisualInferenceInput(
+                                photoArtifact =
+                                    runCatching {
+                                        capturePhotoArtifact(
+                                            context = context,
+                                            cameraController = cameraController,
+                                            mediaStore = mediaStore,
+                                        )
+                                    }.getOrNull(),
+                            ),
                         )
                 }
             },
             onStartKnockTest = {
-                onStartKnockTest(visualScanResult ?: createPlaceholderVisualResult())
+                visualScanResult?.let(onStartKnockTest)
             },
         )
     } else {
@@ -338,17 +345,3 @@ private suspend fun capturePhotoArtifact(
     }
     return mediaStore.readPhotoArtifactMetadata(photoFile, capturedAtMillis)
 }
-
-private fun createPlaceholderVisualResult(photoArtifact: TrainingMediaArtifact? = null): VisualScanResult =
-    VisualScanResult(
-        score = 72,
-        confidencePercent = 64,
-        capturedAtMillis = System.currentTimeMillis(),
-        evidence =
-            listOf(
-                "Centered frame captured",
-                "Shape and surface scoring placeholder",
-                "Ready for knock-test refinement",
-            ),
-        photoArtifact = photoArtifact,
-    )

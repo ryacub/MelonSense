@@ -47,11 +47,12 @@ import com.ryacub.melonsense.R
 import com.ryacub.melonsense.data.training.FileTrainingMediaStore
 import com.ryacub.melonsense.data.training.TRAINING_MEDIA_RETENTION_MILLIS
 import com.ryacub.melonsense.domain.audio.KnockAudioAnalyzer
-import com.ryacub.melonsense.domain.model.AudioScanResult
+import com.ryacub.melonsense.domain.inference.AssessmentInferenceInput
+import com.ryacub.melonsense.domain.inference.AudioInferenceInput
+import com.ryacub.melonsense.domain.inference.MelonInferenceEngine
 import com.ryacub.melonsense.domain.model.KnockCapture
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
 import com.ryacub.melonsense.domain.model.PendingTrainingMedia
-import com.ryacub.melonsense.domain.model.ResultLabel
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun KnockTestScreen(
+    inferenceEngine: MelonInferenceEngine,
     visualScanResult: VisualScanResult?,
     onAnalyzeResult: (MelonAssessmentResult) -> Unit,
 ) {
@@ -127,9 +129,12 @@ fun KnockTestScreen(
                         capturedAtMillis = capturedAtMillis,
                     )
                 val audioScanResult =
-                    KnockAudioAnalyzer
-                        .buildAudioScanResult(validKnocks)
-                        .copy(audioArtifact = audioArtifact)
+                    inferenceEngine.scoreAudio(
+                        AudioInferenceInput(
+                            validKnocks = validKnocks,
+                            audioArtifact = audioArtifact,
+                        ),
+                    )
                 val trainingMedia =
                     PendingTrainingMedia(
                         photoArtifact = visualScanResult?.photoArtifact,
@@ -138,11 +143,13 @@ fun KnockTestScreen(
                         expiresAtMillis = capturedAtMillis + TRAINING_MEDIA_RETENTION_MILLIS,
                     )
                 onAnalyzeResult(
-                    buildAssessmentResult(
-                        visualScanResult = visualScanResult,
-                        audioScanResult = audioScanResult,
-                        recommendation = recommendation,
-                        trainingMedia = trainingMedia,
+                    inferenceEngine.assess(
+                        AssessmentInferenceInput(
+                            visualScanResult = visualScanResult,
+                            audioScanResult = audioScanResult,
+                            recommendation = recommendation,
+                            trainingMedia = trainingMedia,
+                        ),
                     ),
                 )
             }
@@ -405,28 +412,6 @@ private data class CapturedKnockWindow(
     val samples: ShortArray,
     val capturedAtMillis: Long,
 )
-
-private fun buildAssessmentResult(
-    visualScanResult: VisualScanResult?,
-    audioScanResult: AudioScanResult,
-    recommendation: String,
-    trainingMedia: PendingTrainingMedia?,
-): MelonAssessmentResult {
-    val visualConfidence = visualScanResult?.confidencePercent ?: 0
-    val finalConfidence =
-        ((visualConfidence * 0.45f) + (audioScanResult.confidencePercent * 0.55f))
-            .toInt()
-            .coerceIn(0, 100)
-
-    return MelonAssessmentResult(
-        visualScanResult = visualScanResult,
-        audioScanResult = audioScanResult,
-        recommendation = recommendation,
-        resultLabel = ResultLabel.GoodCandidate,
-        confidencePercent = finalConfidence,
-        trainingMedia = trainingMedia,
-    )
-}
 
 private fun List<CapturedKnockWindow>.concatSamples(): ShortArray {
     val totalSize = sumOf { window -> window.samples.size }
