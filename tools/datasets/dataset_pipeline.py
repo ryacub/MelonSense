@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -53,7 +54,7 @@ APPROVED_SOURCES: dict[str, DatasetSource] = {
         source_url="https://universe.roboflow.com/fyp-bkvhr/watermelon-ripeness-grading",
         roboflow_workspace="fyp-bkvhr",
         roboflow_project="watermelon-ripeness-grading",
-        roboflow_version=1,
+        roboflow_version=7,
         license="CC BY 4.0",
         attribution="Watermelon Ripeness Grading dataset by FYP on Roboflow Universe",
         source_labels={
@@ -63,6 +64,20 @@ APPROVED_SOURCES: dict[str, DatasetSource] = {
             "watermelon": "watermelon_detection_only",
         },
         task_type="classification_or_detection",
+    ),
+    "roboflow-saysay-ripe-unripe": DatasetSource(
+        source_id="roboflow-saysay-ripe-unripe",
+        source_url="https://universe.roboflow.com/saysayroboflow/watermelon-ripe-semiripe-unripe",
+        roboflow_workspace="saysayroboflow",
+        roboflow_project="watermelon-ripe-semiripe-unripe",
+        roboflow_version=6,
+        license="CC BY 4.0",
+        attribution="Watermelon-Ripe-SemiRipe-UnRipe dataset by saysayroboflow on Roboflow Universe",
+        source_labels={
+            "Ripe": "ripe",
+            "unripe": "unripe",
+        },
+        task_type="object_detection",
     ),
 }
 
@@ -162,6 +177,38 @@ def convert_classification_tree(
     records = build_classification_records(repo_root, raw_dir, metadata, source)
     if not records:
         raise ValueError(f"No supported image files found under {raw_dir}")
+
+    output_dir = repo_root / "datasets" / "interim" / dataset_version
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_file = output_dir / MANIFEST_FILE
+    with manifest_file.open("w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record, sort_keys=True))
+            handle.write("\n")
+
+    manifest_summary = {
+        "dataset_version": dataset_version,
+        "source_id": source_id,
+        "manifest_path": manifest_file.as_posix(),
+        "record_count": len(records),
+    }
+    write_json(output_dir / "manifest_metadata.json", manifest_summary)
+    return manifest_summary
+
+
+def convert_yolo_detection_tree(
+    *,
+    repo_root: Path,
+    source_id: str,
+    dataset_version: str,
+) -> dict[str, Any]:
+    source = require_approved_source(source_id)
+    raw_dir = raw_source_dir(repo_root, source_id)
+    metadata = read_required_metadata(raw_dir)
+    class_names = read_yolo_class_names(raw_dir / "data.yaml")
+    records = build_yolo_detection_records(repo_root, raw_dir, metadata, source, class_names)
+    if not records:
+        raise ValueError(f"No supported YOLO image files found under {raw_dir}")
 
     output_dir = repo_root / "datasets" / "interim" / dataset_version
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -300,6 +347,102 @@ def build_classification_records(
     return records
 
 
+def build_yolo_detection_records(
+    repo_root: Path,
+    raw_dir: Path,
+    metadata: dict[str, Any],
+    source: DatasetSource,
+    class_names: list[str],
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for split in ("train", "valid", "validation", "test"):
+        images_dir = raw_dir / split / "images"
+        labels_dir = raw_dir / split / "labels"
+        if not images_dir.exists():
+            continue
+        for image_file in sorted(images_dir.rglob("*")):
+            if not image_file.is_file() or image_file.suffix.lower() not in IMAGE_SUFFIXES:
+                continue
+            label_file = labels_dir / f"{image_file.stem}.txt"
+            annotations = read_yolo_annotations(label_file, class_names, source)
+            normalized_labels = sorted(
+                {annotation["normalized_label"] for annotation in annotations},
+            )
+            source_labels = sorted({annotation["source_label"] for annotation in annotations})
+            records.append(
+                {
+                    "source_id": source.source_id,
+                    "source_url": metadata["source_url"],
+                    "license": metadata["license"],
+                    "image_path": image_file.relative_to(repo_root).as_posix(),
+                    "annotation_path": label_file.relative_to(repo_root).as_posix()
+                    if label_file.exists()
+                    else None,
+                    "source_label": single_or_mixed(source_labels),
+                    "normalized_label": single_or_mixed(normalized_labels),
+                    "normalized_labels": normalized_labels,
+                    "split": split,
+                    "task_type": "object_detection",
+                    "annotations": annotations,
+                    "attribution": metadata["attribution"],
+                    "review_state": "needs_sample_audit",
+                },
+            )
+    return records
+
+
+def read_yolo_class_names(data_yaml: Path) -> list[str]:
+    if not data_yaml.exists():
+        raise FileNotFoundError(f"Missing YOLO data.yaml: {data_yaml}")
+    for line in data_yaml.read_text(encoding="utf-8").splitlines():
+        if not line.strip().startswith("names:"):
+            continue
+        _, raw_names = line.split(":", 1)
+        names = ast.literal_eval(raw_names.strip())
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise ValueError("YOLO data.yaml names must be a list of strings")
+        return names
+    raise ValueError(f"YOLO data.yaml missing names: {data_yaml}")
+
+
+def read_yolo_annotations(
+    label_file: Path,
+    class_names: list[str],
+    source: DatasetSource,
+) -> list[dict[str, Any]]:
+    if not label_file.exists():
+        return []
+    annotations: list[dict[str, Any]] = []
+    with label_file.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) != 5:
+                raise ValueError(f"Invalid YOLO row in {label_file}:{line_number}")
+            class_id = int(parts[0])
+            if class_id < 0 or class_id >= len(class_names):
+                raise ValueError(f"Unknown YOLO class id in {label_file}:{line_number}: {class_id}")
+            source_label = class_names[class_id]
+            annotations.append(
+                {
+                    "class_id": class_id,
+                    "source_label": source_label,
+                    "normalized_label": source.source_labels.get(source_label, "unknown"),
+                    "bbox_yolo": [float(value) for value in parts[1:]],
+                },
+            )
+    return annotations
+
+
+def single_or_mixed(labels: list[str]) -> str:
+    if not labels:
+        return "unknown"
+    if len(labels) == 1:
+        return labels[0]
+    return "mixed"
+
+
 def infer_label(
     raw_dir: Path,
     image_file: Path,
@@ -396,6 +539,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     convert_parser.add_argument("--source-id", required=True)
     convert_parser.add_argument("--dataset-version", required=True)
 
+    yolo_parser = subparsers.add_parser("convert-yolo-detection")
+    yolo_parser.add_argument("--source-id", required=True)
+    yolo_parser.add_argument("--dataset-version", required=True)
+
     stats_parser = subparsers.add_parser("manifest-stats")
     stats_parser.add_argument("--manifest", type=Path, required=True)
 
@@ -440,6 +587,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif args.command == "convert-classification":
         result = convert_classification_tree(
+            repo_root=repo_root,
+            source_id=args.source_id,
+            dataset_version=args.dataset_version,
+        )
+    elif args.command == "convert-yolo-detection":
+        result = convert_yolo_detection_tree(
             repo_root=repo_root,
             source_id=args.source_id,
             dataset_version=args.dataset_version,

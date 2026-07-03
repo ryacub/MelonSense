@@ -192,6 +192,65 @@ class DatasetPipelineTest(unittest.TestCase):
                 audit["samples"],
             )
 
+    def test_convert_yolo_detection_tree_writes_detection_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            raw_dir = repo_root / "datasets" / "raw" / "roboflow-fyp-ripeness"
+            (raw_dir / "train" / "images").mkdir(parents=True)
+            (raw_dir / "train" / "labels").mkdir(parents=True)
+            image = raw_dir / "train" / "images" / "melon.jpg"
+            label = raw_dir / "train" / "labels" / "melon.txt"
+            image.write_bytes(b"image")
+            label.write_text("1 0.5 0.5 0.25 0.25\n", encoding="utf-8")
+            (raw_dir / "data.yaml").write_text(
+                "train: ../train/images\n"
+                "val: ../valid/images\n"
+                "test: ../test/images\n"
+                "nc: 3\n"
+                "names: ['overripe', 'ripe', 'underripe']\n",
+                encoding="utf-8",
+            )
+            (raw_dir / "source_metadata.json").write_text(
+                json.dumps(
+                    {
+                        "source_id": "roboflow-fyp-ripeness",
+                        "source_url": "https://universe.roboflow.com/fyp-bkvhr/watermelon-ripeness-grading",
+                        "license": "CC BY 4.0",
+                        "attribution": "Watermelon Ripeness Grading dataset by FYP on Roboflow Universe",
+                        "downloaded_date": "2026-07-03",
+                        "checksum_sha256": "abc123",
+                    },
+                ),
+                encoding="utf-8",
+            )
+
+            manifest = dataset_pipeline.convert_yolo_detection_tree(
+                repo_root=repo_root,
+                source_id="roboflow-fyp-ripeness",
+                dataset_version="visual-ripeness-v0",
+            )
+
+            manifest_file = repo_root / "datasets" / "interim" / "visual-ripeness-v0" / "manifest.jsonl"
+            records = [json.loads(line) for line in manifest_file.read_text(encoding="utf-8").splitlines()]
+
+            self.assertEqual(1, manifest["record_count"])
+            self.assertEqual("object_detection", records[0]["task_type"])
+            self.assertEqual("train", records[0]["split"])
+            self.assertEqual("ripe", records[0]["source_label"])
+            self.assertEqual("ripe", records[0]["normalized_label"])
+            self.assertEqual("datasets/raw/roboflow-fyp-ripeness/train/labels/melon.txt", records[0]["annotation_path"])
+            self.assertEqual(
+                [
+                    {
+                        "bbox_yolo": [0.5, 0.5, 0.25, 0.25],
+                        "class_id": 1,
+                        "normalized_label": "ripe",
+                        "source_label": "ripe",
+                    },
+                ],
+                records[0]["annotations"],
+            )
+
 
 def write_manifest_records(
     manifest_file: Path,
