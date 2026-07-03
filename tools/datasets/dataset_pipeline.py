@@ -418,20 +418,23 @@ def read_yolo_annotations(
             if not line.strip():
                 continue
             parts = line.split()
-            if len(parts) != 5:
+            if len(parts) < 5 or len(parts) % 2 == 0:
                 raise ValueError(f"Invalid YOLO row in {label_file}:{line_number}")
             class_id = int(parts[0])
             if class_id < 0 or class_id >= len(class_names):
                 raise ValueError(f"Unknown YOLO class id in {label_file}:{line_number}: {class_id}")
             source_label = class_names[class_id]
-            annotations.append(
-                {
-                    "class_id": class_id,
-                    "source_label": source_label,
-                    "normalized_label": source.source_labels.get(source_label, "unknown"),
-                    "bbox_yolo": [float(value) for value in parts[1:]],
-                },
-            )
+            annotation = {
+                "class_id": class_id,
+                "source_label": source_label,
+                "normalized_label": source.source_labels.get(source_label, "unknown"),
+            }
+            coordinates = [float(value) for value in parts[1:]]
+            if len(parts) == 5:
+                annotation["bbox_yolo"] = coordinates
+            else:
+                annotation["polygon_yolo"] = coordinates
+            annotations.append(annotation)
     return annotations
 
 
