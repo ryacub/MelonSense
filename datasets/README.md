@@ -32,6 +32,24 @@ Validate that raw training artifacts are ignored by git:
 python3 -m tools.datasets.dataset_pipeline validate-gitignore
 ```
 
+Download and stage the approved Roboflow export with an API key:
+
+```sh
+export ROBOFLOW_API_KEY=<your key>
+python3 -m tools.datasets.dataset_pipeline download-roboflow \
+  --source-id roboflow-capstone-sweetness \
+  --format folder \
+  --archive-name roboflow-capstone-sweetness.zip \
+  --downloaded-date 2026-07-03
+```
+
+If using the Roboflow web UI instead:
+
+1. Open `https://universe.roboflow.com/capstonesementara/sweetness-watermelon/dataset/1`.
+2. Click `Download Dataset`.
+3. Choose a classification folder-style export.
+4. Download the ZIP locally and run `stage-archive`, or copy the temporary export URL and run `download-archive`.
+
 Stage a manually downloaded Roboflow export archive:
 
 ```sh
@@ -56,6 +74,21 @@ Convert a classification-style folder tree into the normalized manifest:
 python3 -m tools.datasets.dataset_pipeline convert-classification \
   --source-id roboflow-capstone-sweetness \
   --dataset-version visual-sweetness-v0
+```
+
+Generate local manifest stats:
+
+```sh
+python3 -m tools.datasets.dataset_pipeline manifest-stats \
+  --manifest datasets/interim/visual-sweetness-v0/manifest.jsonl
+```
+
+List sample image paths per normalized label for manual audit:
+
+```sh
+python3 -m tools.datasets.dataset_pipeline sample-audit \
+  --manifest datasets/interim/visual-sweetness-v0/manifest.jsonl \
+  --samples-per-label 5
 ```
 
 Expected classification layout:
