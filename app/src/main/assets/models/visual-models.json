@@ -1,0 +1,26 @@
+{
+  "version": "runtime-v0",
+  "preprocessing": {
+    "imageSize": 96,
+    "inputLayout": "rgb_chw",
+    "normalization": "float32_0_1",
+    "resizeMode": "nearest",
+    "cropMode": "full_image"
+  },
+  "tracks": [
+    {
+      "id": "ripeness",
+      "asset": "models/visual-runtime-ripeness-v0.ptl",
+      "byteSize": 568133,
+      "labels": ["ripe", "unripe"],
+      "weight": 0.7
+    },
+    {
+      "id": "sweetness",
+      "asset": "models/visual-sweetness-fa99cb0.ptl",
+      "byteSize": 568323,
+      "labels": ["not_sweet", "sweet"],
+      "weight": 0.3
+    }
+  ]
+}

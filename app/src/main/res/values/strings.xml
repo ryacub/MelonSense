@@ -6,11 +6,11 @@
     <string name="history_title">History</string>
     <string name="settings_title">Settings</string>
     <string name="scan_headline">Frame a watermelon</string>
-    <string name="scan_body">Hold steady and keep one watermelon inside the frame.</string>
+    <string name="scan_body">Hold steady and keep one watermelon clearly in view.</string>
     <string name="scan_primary_action">Capture Frame</string>
     <string name="scan_continue_action">Start Knock Test</string>
     <string name="scan_ready_state">Ready for best-frame capture</string>
-    <string name="scan_framing_hint">Center one watermelon in the guide</string>
+    <string name="scan_framing_hint">Keep one watermelon clearly in view</string>
     <string name="scan_visual_score">Visual score: %1$d</string>
     <string name="scan_visual_confidence">Visual confidence: %1$d%%</string>
     <string name="scan_permission_title">Camera permission needed</string>

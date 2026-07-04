@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.pytorch.android.lite)
     ksp(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)

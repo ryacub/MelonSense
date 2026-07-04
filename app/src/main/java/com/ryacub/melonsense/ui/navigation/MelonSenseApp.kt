@@ -33,7 +33,9 @@ import com.ryacub.melonsense.data.training.TrainingDatasetExportRepository
 import com.ryacub.melonsense.data.training.TrainingQueueItem
 import com.ryacub.melonsense.data.training.TrainingRetentionRepository
 import com.ryacub.melonsense.data.training.scheduleTrainingRetentionWork
-import com.ryacub.melonsense.domain.inference.PlaceholderMelonInferenceEngine
+import com.ryacub.melonsense.domain.inference.LocalVisualMelonInferenceEngine
+import com.ryacub.melonsense.domain.inference.LocalVisualModelScorer
+import com.ryacub.melonsense.domain.inference.PytorchVisualModelRunner
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
 import com.ryacub.melonsense.domain.model.VisualScanResult
 import com.ryacub.melonsense.ui.screens.HistoryScreen
@@ -52,7 +54,15 @@ fun MelonSenseApp() {
     val coroutineScope = rememberCoroutineScope()
     val database = remember(context) { MelonSenseDatabase.getInstance(context) }
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
-    val inferenceEngine = remember { PlaceholderMelonInferenceEngine() }
+    val inferenceEngine =
+        remember(context) {
+            LocalVisualMelonInferenceEngine(
+                visualModelScorer =
+                    LocalVisualModelScorer(
+                        runner = PytorchVisualModelRunner(context),
+                    ),
+            )
+        }
     val historyRepository =
         remember(database) {
             RoomHistoryRepository(

@@ -10,13 +10,11 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +29,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -57,6 +54,7 @@ import com.ryacub.melonsense.domain.inference.MelonInferenceEngine
 import com.ryacub.melonsense.domain.inference.VisualInferenceInput
 import com.ryacub.melonsense.domain.model.TrainingMediaArtifact
 import com.ryacub.melonsense.domain.model.VisualScanResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -103,17 +101,22 @@ fun ScanScreen(
             visualScanResult = visualScanResult,
             onCaptureFrame = {
                 scope.launch {
+                    val photoArtifact =
+                        try {
+                            capturePhotoArtifact(
+                                context = context,
+                                cameraController = cameraController,
+                                mediaStore = mediaStore,
+                            )
+                        } catch (exception: CancellationException) {
+                            throw exception
+                        } catch (exception: Exception) {
+                            null
+                        }
                     visualScanResult =
                         inferenceEngine.scoreVisual(
                             VisualInferenceInput(
-                                photoArtifact =
-                                    runCatching {
-                                        capturePhotoArtifact(
-                                            context = context,
-                                            cameraController = cameraController,
-                                            mediaStore = mediaStore,
-                                        )
-                                    }.getOrNull(),
+                                photoArtifact = photoArtifact,
                             ),
                         )
                 }
@@ -156,7 +159,6 @@ private fun ScanContent(
                 cameraController = cameraController,
                 modifier = Modifier.fillMaxSize(),
             )
-            FramingOverlay(modifier = Modifier.fillMaxSize())
         }
 
         VisualScanStatus(visualScanResult = visualScanResult)
@@ -211,38 +213,6 @@ private fun CameraPreview(
             }
         },
     )
-}
-
-@Composable
-private fun FramingOverlay(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.padding(20.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth(0.82f)
-                    .aspectRatio(1f)
-                    .border(
-                        width = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(8.dp),
-                    ),
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-                shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.scan_framing_hint),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-        }
-    }
 }
 
 @Composable

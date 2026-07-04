@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from PIL import Image
@@ -19,6 +20,12 @@ class VisualBaselineTest(unittest.TestCase):
             visual_baseline.GROUPED_PHASH_SPLIT_STRATEGY,
             visual_baseline.TRACKS["ripeness"]["split_strategy"],
         )
+        self.assertEqual(
+            visual_baseline.GROUPED_PHASH_SPLIT_STRATEGY,
+            visual_baseline.TRACKS["runtime_ripeness"]["split_strategy"],
+        )
+        self.assertEqual("image", visual_baseline.TRACKS["runtime_ripeness"]["sample_source"])
+        self.assertEqual(["ripe", "unripe"], visual_baseline.TRACKS["runtime_ripeness"]["labels"])
 
     def test_collect_image_samples_filters_to_allowed_labels(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -367,8 +374,12 @@ class VisualBaselineTest(unittest.TestCase):
             self.assertTrue(torchscript_path.exists())
             self.assertTrue(mobile_path.exists())
             self.assertIn(result.android_candidate_format, {"torchscript_lite", "torchscript"})
-            loaded = torch.jit.load(result.android_candidate_path)
-            self.assertEqual((1, 2), tuple(loaded(torch.zeros(1, 3, 8, 8)).shape))
+            if result.android_candidate_format == "torchscript_lite":
+                with zipfile.ZipFile(result.android_candidate_path) as archive:
+                    self.assertTrue(any(name.endswith("bytecode.pkl") for name in archive.namelist()))
+            else:
+                loaded = torch.jit.load(result.android_candidate_path)
+                self.assertEqual((1, 2), tuple(loaded(torch.zeros(1, 3, 8, 8)).shape))
 
     def test_metrics_report_dataset_breakdown(self) -> None:
         samples = [

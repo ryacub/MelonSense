@@ -33,6 +33,15 @@ ripe
 unripe
 ```
 
+Android runtime ripeness uses full-image classification records from the same
+ripeness manifests. It is currently binary because the public full-image labels
+do not provide a usable overripe class:
+
+```text
+ripe
+unripe
+```
+
 Records labeled `unknown`, `mixed`, `watermelon_detection_only`,
 `watermelon_generic`, and `fruit_detection_other` are excluded from these two
 baseline classifiers.
@@ -84,6 +93,13 @@ python3 -m tools.training.visual_baseline train \
 python3 -m tools.training.visual_baseline train \
   --track ripeness \
   --epochs 3
+```
+
+```sh
+python3 -m tools.training.visual_baseline train \
+  --track runtime_ripeness \
+  --max-samples-per-class 1500 \
+  --epochs 8
 ```
 
 The default model is `--model-size strong`, a larger local PyTorch CNN with

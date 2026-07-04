@@ -42,6 +42,15 @@ TRACKS = {
         "sample_source": "annotation",
         "split_strategy": GROUPED_PHASH_SPLIT_STRATEGY,
     },
+    "runtime_ripeness": {
+        "labels": ["ripe", "unripe"],
+        "manifests": [
+            "datasets/interim/visual-ripeness-fyp-v0/manifest.jsonl",
+            "datasets/interim/visual-ripeness-saysay-v0/manifest.jsonl",
+        ],
+        "sample_source": "image",
+        "split_strategy": GROUPED_PHASH_SPLIT_STRATEGY,
+    },
 }
 
 
@@ -1125,7 +1134,7 @@ def export_model(
     try:
         from torch.utils.mobile_optimizer import optimize_for_mobile
 
-        optimize_for_mobile(scripted).save(mobile_path)
+        optimize_for_mobile(scripted)._save_for_lite_interpreter(str(mobile_path))
     except Exception as error:
         android_candidate_format = "torchscript"
         mobile_export_error = str(error)
