@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
+import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass, replace
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +21,10 @@ from torch.utils.data import DataLoader, Dataset
 
 IMAGE_SIZE = 96
 BATCH_SIZE = 32
+INPUT_LAYOUT = "rgb_chw"
+NORMALIZATION = "float32_0_1"
+RESIZE_MODE = "nearest"
+RESAMPLE_FILTER = Image.Resampling.NEAREST
 TRACKS = {
     "sweetness": {
         "labels": ["not_sweet", "sweet"],
@@ -43,6 +50,8 @@ class Sample:
     label: str
     split: str
     crop: tuple[float, float, float, float] | None
+    source_dataset: str = "unknown"
+    group_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -144,18 +153,23 @@ def collect_image_samples(
 ) -> list[Sample]:
     allowed = set(allowed_labels)
     samples: list[Sample] = []
-    for record in read_manifest_records(manifest_paths):
-        label = str(record.get("normalized_label", "unknown"))
-        if label not in allowed:
-            continue
-        samples.append(
-            Sample(
-                image_path=repo_root / str(record["image_path"]),
-                label=label,
-                split=str(record.get("split", infer_split_from_path(str(record["image_path"])))),
-                crop=None,
-            ),
-        )
+    for manifest_path in manifest_paths:
+        for record in read_manifest_records([manifest_path]):
+            label = str(record.get("normalized_label", "unknown"))
+            if label not in allowed:
+                continue
+            image_path = str(record["image_path"])
+            source_dataset = source_dataset_for_record(record, manifest_path, repo_root)
+            samples.append(
+                Sample(
+                    image_path=repo_root / image_path,
+                    label=label,
+                    split=str(record.get("split", infer_split_from_path(image_path))),
+                    crop=None,
+                    source_dataset=source_dataset,
+                    group_key=group_key_for_record(record, image_path, source_dataset),
+                ),
+            )
     return samples
 
 
@@ -167,24 +181,73 @@ def collect_annotation_samples(
 ) -> list[Sample]:
     allowed = set(allowed_labels)
     samples: list[Sample] = []
-    for record in read_manifest_records(manifest_paths):
-        split = str(record.get("split", infer_split_from_path(str(record["image_path"]))))
-        for annotation in record.get("annotations", []):
-            label = str(annotation.get("normalized_label", "unknown"))
-            if label not in allowed:
-                continue
-            crop = annotation_crop(annotation)
-            if crop is None:
-                continue
-            samples.append(
-                Sample(
-                    image_path=repo_root / str(record["image_path"]),
-                    label=label,
-                    split=split,
-                    crop=crop,
-                ),
-            )
+    for manifest_path in manifest_paths:
+        for record in read_manifest_records([manifest_path]):
+            image_path = str(record["image_path"])
+            split = str(record.get("split", infer_split_from_path(image_path)))
+            source_dataset = source_dataset_for_record(record, manifest_path, repo_root)
+            group_key = group_key_for_record(record, image_path, source_dataset)
+            for annotation in record.get("annotations", []):
+                label = str(annotation.get("normalized_label", "unknown"))
+                if label not in allowed:
+                    continue
+                crop = annotation_crop(annotation)
+                if crop is None:
+                    continue
+                samples.append(
+                    Sample(
+                        image_path=repo_root / image_path,
+                        label=label,
+                        split=split,
+                        crop=crop,
+                        source_dataset=source_dataset,
+                        group_key=group_key,
+                    ),
+                )
     return samples
+
+
+def collect_holdout_samples(
+    *,
+    repo_root: Path,
+    manifest_paths: list[Path],
+    allowed_labels: list[str],
+    sample_source: str,
+) -> list[Sample]:
+    collector = collect_annotation_samples if sample_source == "annotation" else collect_image_samples
+    return [
+        replace(sample, split="holdout")
+        for sample in collector(
+            repo_root=repo_root,
+            manifest_paths=manifest_paths,
+            allowed_labels=allowed_labels,
+        )
+    ]
+
+
+def source_dataset_for_record(record: dict[str, Any], manifest_path: Path, repo_root: Path) -> str:
+    for key in ("source_dataset", "source_id", "dataset_id"):
+        value = record.get(key)
+        if value:
+            return str(value)
+    if manifest_path.parent == repo_root:
+        return manifest_path.stem
+    return manifest_path.parent.name
+
+
+def group_key_for_record(record: dict[str, Any], image_path: str, source_dataset: str) -> str:
+    for key in ("group_key", "source_image_id", "original_image_id", "original_image_path"):
+        value = record.get(key)
+        if value:
+            return f"{source_dataset}:{value}"
+    return f"{source_dataset}:{canonical_image_name(image_path)}"
+
+
+def canonical_image_name(image_path: str) -> str:
+    name = Path(image_path).name
+    if ".rf." in name:
+        return name.split(".rf.", maxsplit=1)[0]
+    return name
 
 
 def read_manifest_records(manifest_paths: list[Path]) -> list[dict[str, Any]]:
@@ -339,6 +402,125 @@ def stratified_split_samples(
     return train, valid, test
 
 
+def grouped_stratified_split_samples(
+    samples: list[Sample],
+    *,
+    train_ratio: float = 0.7,
+    valid_ratio: float = 0.15,
+    seed: int = 17,
+) -> tuple[list[Sample], list[Sample], list[Sample]]:
+    groups: dict[str, list[Sample]] = {}
+    for sample in samples:
+        groups.setdefault(sample.group_key or sample.image_path.as_posix(), []).append(sample)
+
+    groups_by_label: dict[str, list[list[Sample]]] = {}
+    for group_samples in groups.values():
+        label_counts = Counter(sample.label for sample in group_samples)
+        group_label = sorted(label_counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+        groups_by_label.setdefault(group_label, []).append(group_samples)
+
+    train: list[Sample] = []
+    valid: list[Sample] = []
+    test: list[Sample] = []
+    rng = random.Random(seed)
+    for label_groups in groups_by_label.values():
+        shuffled = list(label_groups)
+        rng.shuffle(shuffled)
+        if len(shuffled) < 3:
+            train.extend(assign_split(flatten_groups(shuffled), "train"))
+            continue
+        train_count, valid_count = split_counts(
+            len(shuffled),
+            train_ratio=train_ratio,
+            valid_ratio=valid_ratio,
+        )
+        train.extend(assign_split(flatten_groups(shuffled[:train_count]), "train"))
+        valid.extend(assign_split(flatten_groups(shuffled[train_count : train_count + valid_count]), "valid"))
+        test.extend(assign_split(flatten_groups(shuffled[train_count + valid_count :]), "test"))
+    rng.shuffle(train)
+    rng.shuffle(valid)
+    rng.shuffle(test)
+    return train, valid, test
+
+
+def apply_perceptual_hash_groups(
+    samples: list[Sample],
+    *,
+    image_size: int = 32,
+    hamming_threshold: int = 8,
+) -> list[Sample]:
+    if not samples:
+        return []
+
+    entries: list[Sample] = []
+    seen_paths: set[Path] = set()
+    for sample in samples:
+        if sample.image_path in seen_paths:
+            continue
+        seen_paths.add(sample.image_path)
+        entries.append(sample)
+
+    parent = list(range(len(entries)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    by_existing_group: dict[str, int] = {}
+    for index, sample in enumerate(entries):
+        existing_group = sample.group_key or sample.image_path.as_posix()
+        if existing_group in by_existing_group:
+            union(by_existing_group[existing_group], index)
+        else:
+            by_existing_group[existing_group] = index
+
+    hashes = [perceptual_hash(sample, image_size=image_size) for sample in entries]
+    for left, right in combinations(range(len(entries)), 2):
+        if hamming_distance(hashes[left], hashes[right]) <= hamming_threshold:
+            union(left, right)
+
+    cluster_members: dict[int, list[str]] = {}
+    for index, sample in enumerate(entries):
+        cluster_members.setdefault(find(index), []).append(sample.group_key or sample.image_path.as_posix())
+    cluster_key_by_root = {
+        root: "phash:" + hashlib.sha1("|".join(sorted(members)).encode("utf-8")).hexdigest()
+        for root, members in cluster_members.items()
+    }
+    cluster_key_by_path = {
+        sample.image_path: cluster_key_by_root[find(index)]
+        for index, sample in enumerate(entries)
+    }
+    return [
+        replace(sample, group_key=cluster_key_by_path[sample.image_path])
+        for sample in samples
+    ]
+
+
+def scarce_grouped_class_counts(samples: list[Sample]) -> dict[str, int]:
+    groups: dict[str, list[Sample]] = {}
+    for sample in samples:
+        groups.setdefault(sample.group_key or sample.image_path.as_posix(), []).append(sample)
+
+    groups_by_label: dict[str, int] = Counter()
+    for group_samples in groups.values():
+        label_counts = Counter(sample.label for sample in group_samples)
+        group_label = sorted(label_counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+        groups_by_label[group_label] += 1
+    return dict(sorted((label, count) for label, count in groups_by_label.items() if count < 3))
+
+
+def flatten_groups(groups: list[list[Sample]]) -> list[Sample]:
+    return [sample for group in groups for sample in group]
+
+
 def assign_split(samples: list[Sample], split: str) -> list[Sample]:
     return [replace(sample, split=split) for sample in samples]
 
@@ -425,7 +607,7 @@ def save_sample_image(sample: Sample, *, output_path: Path, image_size: int) -> 
                 max(int(bottom * height), int(top * height) + 1),
             )
             image = image.crop(box)
-        image = image.resize((image_size, image_size))
+        image = image.resize((image_size, image_size), resample=RESAMPLE_FILTER)
         image.save(output_path, format="JPEG", quality=90)
 
 
@@ -442,9 +624,68 @@ def load_image_tensor(sample: Sample, image_size: int) -> torch.Tensor:
                 max(int(bottom * height), int(top * height) + 1),
             )
             image = image.crop(box)
-        image = image.resize((image_size, image_size))
+        image = image.resize((image_size, image_size), resample=RESAMPLE_FILTER)
         array = np.asarray(image, dtype=np.float32) / 255.0
     return torch.from_numpy(array).permute(2, 0, 1)
+
+
+def perceptual_hash(sample: Sample, *, image_size: int = 32) -> str:
+    with Image.open(sample.image_path) as original:
+        image = ImageOps.exif_transpose(original).convert("L")
+        image = image.resize((image_size, image_size))
+        array = np.asarray(image, dtype=np.float32)
+    average = float(array.mean())
+    bits = ["1" if value >= average else "0" for value in array.flatten()]
+    return f"{int(''.join(bits), 2):0{image_size * image_size // 4}x}"
+
+
+def hamming_distance(left: str, right: str) -> int:
+    return (int(left, 16) ^ int(right, 16)).bit_count()
+
+
+def audit_split_duplicates(
+    samples: list[Sample],
+    *,
+    image_size: int = 32,
+    hamming_threshold: int = 8,
+) -> dict[str, Any]:
+    by_image: dict[tuple[Path, str], Sample] = {}
+    for sample in samples:
+        by_image.setdefault((sample.image_path, sample.split), sample)
+
+    entries = [
+        {
+            "image_path": sample.image_path.as_posix(),
+            "split": sample.split,
+            "source_dataset": sample.source_dataset,
+            "group_key": sample.group_key or sample.image_path.as_posix(),
+            "perceptual_hash": perceptual_hash(sample, image_size=image_size),
+        }
+        for sample in by_image.values()
+    ]
+    duplicates = []
+    for left, right in combinations(entries, 2):
+        if left["split"] == right["split"]:
+            continue
+        distance = hamming_distance(str(left["perceptual_hash"]), str(right["perceptual_hash"]))
+        if distance <= hamming_threshold:
+            duplicates.append(
+                {
+                    "left": left["image_path"],
+                    "right": right["image_path"],
+                    "splits": sorted({str(left["split"]), str(right["split"])}),
+                    "hamming_distance": distance,
+                    "left_group_key": left["group_key"],
+                    "right_group_key": right["group_key"],
+                }
+            )
+    return {
+        "hash_algorithm": f"average_hash_{image_size}x{image_size}",
+        "hamming_threshold": hamming_threshold,
+        "sampled_image_count": len(entries),
+        "cross_split_near_duplicate_count": len(duplicates),
+        "cross_split_near_duplicates": duplicates[:50],
+    }
 
 
 def compute_classification_metrics(
@@ -455,6 +696,27 @@ def compute_classification_metrics(
     predictions: list[int],
     probabilities: list[list[float]],
     max_failed_examples: int,
+) -> dict[str, Any]:
+    return compute_classification_metrics_internal(
+        labels=labels,
+        samples=samples,
+        truth=truth,
+        predictions=predictions,
+        probabilities=probabilities,
+        max_failed_examples=max_failed_examples,
+        include_source_breakdown=True,
+    )
+
+
+def compute_classification_metrics_internal(
+    *,
+    labels: list[str],
+    samples: list[Sample],
+    truth: list[int],
+    predictions: list[int],
+    probabilities: list[list[float]],
+    max_failed_examples: int,
+    include_source_breakdown: bool,
 ) -> dict[str, Any]:
     matrix = [[0 for _ in labels] for _ in labels]
     for expected, predicted in zip(truth, predictions):
@@ -485,7 +747,7 @@ def compute_classification_metrics(
         if len(failed_examples) >= max_failed_examples:
             break
 
-    return {
+    metrics = {
         "accuracy": sum(1 for expected, predicted in zip(truth, predictions) if expected == predicted)
         / len(truth)
         if truth
@@ -497,6 +759,42 @@ def compute_classification_metrics(
             for row, label in enumerate(labels)
         },
         "failed_examples": failed_examples,
+    }
+    if include_source_breakdown:
+        metrics["by_source_dataset"] = source_dataset_metrics(
+            labels=labels,
+            samples=samples,
+            truth=truth,
+            predictions=predictions,
+            probabilities=probabilities,
+            max_failed_examples=max_failed_examples,
+        )
+    return metrics
+
+
+def source_dataset_metrics(
+    *,
+    labels: list[str],
+    samples: list[Sample],
+    truth: list[int],
+    predictions: list[int],
+    probabilities: list[list[float]],
+    max_failed_examples: int,
+) -> dict[str, Any]:
+    by_source: dict[str, list[int]] = {}
+    for index, sample in enumerate(samples):
+        by_source.setdefault(sample.source_dataset, []).append(index)
+    return {
+        source_dataset: compute_classification_metrics_internal(
+            labels=labels,
+            samples=[samples[index] for index in indices],
+            truth=[truth[index] for index in indices],
+            predictions=[predictions[index] for index in indices],
+            probabilities=[probabilities[index] for index in indices],
+            max_failed_examples=max_failed_examples,
+            include_source_breakdown=False,
+        )
+        for source_dataset, indices in sorted(by_source.items())
     }
 
 
@@ -510,6 +808,8 @@ def train_track(
     image_size: int,
     batch_size: int,
     model_size: str,
+    seed: int = 17,
+    holdout_manifest_paths: list[Path] | None = None,
 ) -> dict[str, Any]:
     if track not in TRACKS:
         raise ValueError(f"Unsupported track: {track}")
@@ -529,14 +829,15 @@ def train_track(
             allowed_labels=labels,
         )
     samples = limit_samples_per_class(samples, max_samples_per_class)
+    samples = apply_perceptual_hash_groups(samples)
     if config.get("split_strategy") == "stratified":
-        train_samples, valid_samples, test_samples = stratified_split_samples(samples)
+        train_samples, valid_samples, test_samples = grouped_stratified_split_samples(samples, seed=seed)
     else:
         train_samples, valid_samples, test_samples = split_samples(samples)
     if not train_samples or not test_samples:
         raise ValueError(f"Track {track} does not have enough samples to train and test")
 
-    seed_everything(17)
+    seed_everything(seed)
     device = select_device()
     model = create_model(model_size, len(labels)).to(device)
     train_loader = DataLoader(
@@ -580,6 +881,28 @@ def train_track(
         if valid_samples
         else None
     )
+    holdout_samples = (
+        collect_holdout_samples(
+            repo_root=repo_root,
+            manifest_paths=holdout_manifest_paths,
+            allowed_labels=labels,
+            sample_source=str(config["sample_source"]),
+        )
+        if holdout_manifest_paths
+        else []
+    )
+    holdout_metrics = (
+        evaluate_model(
+            model=model,
+            samples=holdout_samples,
+            labels=labels,
+            image_size=image_size,
+            batch_size=batch_size,
+            device=device,
+        )
+        if holdout_samples
+        else None
+    )
 
     run_dir = output_root / track
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -600,16 +923,34 @@ def train_track(
             "train": len(train_samples),
             "valid": len(valid_samples),
             "test": len(test_samples),
+            "holdout": len(holdout_samples),
         },
         "class_balance": {
             "all": label_balance(samples),
             "train": label_balance(train_samples),
             "valid": label_balance(valid_samples),
             "test": label_balance(test_samples),
+            "holdout": label_balance(holdout_samples),
         },
+        "scarce_grouped_class_counts": scarce_grouped_class_counts(samples),
+        "duplicate_audit": audit_split_duplicates(train_samples + valid_samples + test_samples + holdout_samples),
+        "metadata": build_run_metadata(
+            repo_root=repo_root,
+            code_repo_root=code_repo_root(),
+            manifest_paths=manifest_paths,
+            holdout_manifest_paths=holdout_manifest_paths or [],
+            track=track,
+            seed=seed,
+            image_size=image_size,
+            batch_size=batch_size,
+            epochs=epochs,
+            model_size=model_size,
+            class_balance=label_balance(samples),
+        ),
         "history": history,
         "valid_metrics": valid_metrics,
         "test_metrics": test_metrics,
+        "holdout_metrics": holdout_metrics,
         "artifacts": {
             "torch_state_dict": torch_model_path.as_posix(),
             "torchscript": export_result.torchscript_path.as_posix(),
@@ -622,6 +963,92 @@ def train_track(
     }
     write_json(run_dir / "metrics.json", summary)
     return summary
+
+
+def build_run_metadata(
+    *,
+    repo_root: Path,
+    code_repo_root: Path | None = None,
+    manifest_paths: list[Path],
+    holdout_manifest_paths: list[Path] | None = None,
+    track: str,
+    seed: int,
+    image_size: int,
+    batch_size: int,
+    epochs: int,
+    model_size: str,
+    class_balance: dict[str, int],
+) -> dict[str, Any]:
+    code_root = code_repo_root or repo_root
+    return {
+        "git_commit": git_commit(code_root),
+        "git_dirty": git_dirty(code_root),
+        "data_git_commit": git_commit(repo_root),
+        "data_git_dirty": git_dirty(repo_root),
+        "track": track,
+        "seed": seed,
+        "model_config": {
+            "model_size": model_size,
+            "image_size": image_size,
+            "batch_size": batch_size,
+            "epochs": epochs,
+            "input_layout": INPUT_LAYOUT,
+            "normalization": NORMALIZATION,
+            "resize_mode": RESIZE_MODE,
+        },
+        "class_balance": class_balance,
+        "manifests": [
+            {
+                "path": manifest_path.as_posix(),
+                "role": "training",
+                "sha256": sha256_file(manifest_path),
+            }
+            for manifest_path in manifest_paths
+        ]
+        + [
+            {
+                "path": manifest_path.as_posix(),
+                "role": "holdout",
+                "sha256": sha256_file(manifest_path),
+            }
+            for manifest_path in (holdout_manifest_paths or [])
+        ],
+    }
+
+
+def code_repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def git_commit(repo_root: Path) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", repo_root.as_posix(), "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unavailable"
+
+
+def git_dirty(repo_root: Path) -> bool | None:
+    try:
+        status = subprocess.check_output(
+            ["git", "-C", repo_root.as_posix(), "status", "--short"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return bool(status.strip())
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def limit_samples_per_class(
@@ -749,6 +1176,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     train_parser.add_argument("--image-size", type=int, default=IMAGE_SIZE)
     train_parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     train_parser.add_argument("--model-size", choices=["small", "strong"], default="strong")
+    train_parser.add_argument("--seed", type=int, default=17)
+    train_parser.add_argument("--holdout-manifest", type=Path, action="append")
 
     manifest_parser = subcommands.add_parser("labeled-manifest", help="Write a labeled-only manifest.")
     add_common_args(manifest_parser)
@@ -787,6 +1216,11 @@ def main(argv: list[str] | None = None) -> int:
             image_size=args.image_size,
             batch_size=args.batch_size,
             model_size=args.model_size,
+            seed=args.seed,
+            holdout_manifest_paths=[
+                (repo_root / manifest).resolve() if not manifest.is_absolute() else manifest
+                for manifest in (args.holdout_manifest or [])
+            ],
         )
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
