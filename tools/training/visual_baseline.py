@@ -25,12 +25,13 @@ INPUT_LAYOUT = "rgb_chw"
 NORMALIZATION = "float32_0_1"
 RESIZE_MODE = "nearest"
 RESAMPLE_FILTER = Image.Resampling.NEAREST
+GROUPED_PHASH_SPLIT_STRATEGY = "grouped_stratified_phash"
 TRACKS = {
     "sweetness": {
         "labels": ["not_sweet", "sweet"],
         "manifests": ["datasets/interim/visual-sweetness-v0/manifest.jsonl"],
         "sample_source": "image",
-        "split_strategy": "stratified",
+        "split_strategy": GROUPED_PHASH_SPLIT_STRATEGY,
     },
     "ripeness": {
         "labels": ["overripe", "ripe", "unripe"],
@@ -39,7 +40,7 @@ TRACKS = {
             "datasets/interim/visual-ripeness-saysay-v0/manifest.jsonl",
         ],
         "sample_source": "annotation",
-        "split_strategy": "stratified",
+        "split_strategy": GROUPED_PHASH_SPLIT_STRATEGY,
     },
 }
 
@@ -830,7 +831,7 @@ def train_track(
         )
     samples = limit_samples_per_class(samples, max_samples_per_class)
     samples = apply_perceptual_hash_groups(samples)
-    if config.get("split_strategy") == "stratified":
+    if config.get("split_strategy") == GROUPED_PHASH_SPLIT_STRATEGY:
         train_samples, valid_samples, test_samples = grouped_stratified_split_samples(samples, seed=seed)
     else:
         train_samples, valid_samples, test_samples = split_samples(samples)

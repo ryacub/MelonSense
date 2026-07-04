@@ -10,6 +10,16 @@ from tools.training import visual_baseline
 
 
 class VisualBaselineTest(unittest.TestCase):
+    def test_track_configs_report_grouped_phash_split_strategy(self) -> None:
+        self.assertEqual(
+            visual_baseline.GROUPED_PHASH_SPLIT_STRATEGY,
+            visual_baseline.TRACKS["sweetness"]["split_strategy"],
+        )
+        self.assertEqual(
+            visual_baseline.GROUPED_PHASH_SPLIT_STRATEGY,
+            visual_baseline.TRACKS["ripeness"]["split_strategy"],
+        )
+
     def test_collect_image_samples_filters_to_allowed_labels(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)

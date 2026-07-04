@@ -49,6 +49,7 @@ The run summary reports:
 ```text
 duplicate_audit.cross_split_near_duplicate_count
 scarce_grouped_class_counts
+split_strategy
 test_metrics.by_source_dataset
 valid_metrics.by_source_dataset
 metadata.git_commit
@@ -61,6 +62,10 @@ acceptable for the current local corpora and is reported as
 `duplicate_audit.sampled_image_count`; if this grows into tens of thousands of
 images, replace the direct comparison with a bucketed hash index before trusting
 runtime.
+
+Leakage-safe runs should report `split_strategy` as
+`grouped_stratified_phash`. A plain `stratified` value means the run predates
+the source-image and perceptual-hash grouping controls.
 
 Scarce grouped classes are kept leakage-safe even when they cannot be balanced
 across all splits. For the current public ripeness data, overripe has only a
