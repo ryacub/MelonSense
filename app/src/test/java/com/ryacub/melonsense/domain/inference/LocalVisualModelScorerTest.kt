@@ -13,25 +13,76 @@ import java.util.zip.ZipFile
 class LocalVisualModelScorerTest {
     @Test
     fun catalog_matchesPackagedLeakageSafeModelMetadata() {
-        assertEquals("melonsense-visual-runtime-v0", LocalVisualModelCatalog.ID)
-        assertEquals("runtime-v0", LocalVisualModelCatalog.VERSION)
+        val catalog = LocalVisualModelCatalog.fallback
+
+        assertEquals("melonsense-visual-runtime-v0", catalog.id)
+        assertEquals("runtime-v0", catalog.version)
         assertEquals(
             listOf("ripe", "unripe"),
-            LocalVisualModelCatalog.tracks.first { track -> track.id == "ripeness" }.labels,
+            catalog.tracks.first { track -> track.id == "ripeness" }.labels,
         )
         assertEquals(
             listOf("not_sweet", "sweet"),
-            LocalVisualModelCatalog.tracks.first { track -> track.id == "sweetness" }.labels,
+            catalog.tracks.first { track -> track.id == "sweetness" }.labels,
         )
-        assertEquals("models/visual-runtime-ripeness-v0.ptl", LocalVisualModelCatalog.tracks[0].assetPath)
-        assertEquals("models/visual-sweetness-fa99cb0.ptl", LocalVisualModelCatalog.tracks[1].assetPath)
-        assertEquals(568_133L, LocalVisualModelCatalog.tracks[0].assetByteSize)
-        assertEquals(568_323L, LocalVisualModelCatalog.tracks[1].assetByteSize)
+        assertEquals("models/visual-runtime-ripeness-v0.ptl", catalog.tracks[0].assetPath)
+        assertEquals("models/visual-sweetness-fa99cb0.ptl", catalog.tracks[1].assetPath)
+        assertEquals(568_133L, catalog.tracks[0].assetByteSize)
+        assertEquals(568_323L, catalog.tracks[1].assetByteSize)
+    }
+
+    @Test
+    fun catalog_parsesReplacementManifestVersionAndTracks() {
+        val catalog =
+            LocalVisualModelCatalog.parse(
+                """
+                {
+                  "id": "melonsense-visual-runtime-v1",
+                  "version": "runtime-v1",
+                  "tracks": [
+                    {
+                      "id": "sweetness",
+                      "asset": "models/visual-sweetness-v1.ptl",
+                      "byteSize": 1234,
+                      "labels": ["not_sweet", "sweet"],
+                      "weight": 1.0
+                    }
+                  ]
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals("melonsense-visual-runtime-v1", catalog.id)
+        assertEquals("runtime-v1", catalog.version)
+        assertEquals(1, catalog.tracks.size)
+        assertEquals("sweetness", catalog.tracks.single().id)
+        assertEquals("models/visual-sweetness-v1.ptl", catalog.tracks.single().assetPath)
+        assertEquals(1234L, catalog.tracks.single().assetByteSize)
+        assertEquals(listOf("not_sweet", "sweet"), catalog.tracks.single().labels)
+        assertEquals(1.0f, catalog.tracks.single().weight)
+    }
+
+    @Test
+    fun catalog_loadFromAssetsFallsBackWhenManifestIsInvalid() {
+        val catalog =
+            LocalVisualModelCatalog.loadFromAssets {
+                """{"id":"bad","version":"runtime-bad","tracks":[]}"""
+            }
+
+        assertEquals(LocalVisualModelCatalog.fallback, catalog)
+    }
+
+    @Test
+    fun packagedCatalogManifest_matchesFallbackCatalog() {
+        val manifestFile = requireAssetFile(LocalVisualModelCatalog.ASSET_PATH)
+        val catalog = LocalVisualModelCatalog.parse(manifestFile.readText())
+
+        assertEquals(LocalVisualModelCatalog.fallback, catalog)
     }
 
     @Test
     fun packagedModelAssets_areLiteInterpreterArchivesAndMatchCatalogSizes() {
-        LocalVisualModelCatalog.tracks.forEach { track ->
+        LocalVisualModelCatalog.fallback.tracks.forEach { track ->
             val assetFile = requireAssetFile(track.assetPath)
 
             assertEquals(track.assetByteSize, assetFile.length())

@@ -42,7 +42,7 @@ class PytorchVisualModelRunnerInstrumentedTest {
                 )
             val runner = PytorchVisualModelRunner(context)
 
-            LocalVisualModelCatalog.tracks.forEach { track ->
+            LocalVisualModelCatalog.fallback.tracks.forEach { track ->
                 val prediction = runner.predict(track, artifact)
 
                 assertTrue(prediction.label in track.labels)

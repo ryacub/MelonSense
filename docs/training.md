@@ -185,6 +185,28 @@ environment. `metrics.json` reports whether that candidate was exported as
 failed. TFLite export is not attempted unless TensorFlow or another TFLite
 converter is available locally.
 
+## Android Model Replacement
+
+Packaged Android visual models are versioned by
+`app/src/main/assets/models/visual-models.json`. The app loads this catalog at
+startup and reports its `id` and `version` through `LocalModelInfo`.
+
+To replace a packaged track after training:
+
+1. Copy the trained `model_mobile.ptl` into `app/src/main/assets/models/` with a
+   versioned name, for example `visual-sweetness-runtime-v1.ptl`.
+2. Update `visual-models.json`:
+   - bump `id` and `version`;
+   - point the track `asset` at the new file;
+   - set `byteSize` to the copied file size;
+   - keep `labels` in the same order emitted by training;
+   - tune `weight` only when changing combined visual scoring behavior.
+3. Run `./gradlew test` and `./gradlew :app:assembleStableDebug`.
+
+If the packaged catalog is malformed, the app falls back to the checked-in
+`runtime-v0` catalog so visual fallback behavior still works. Unit tests assert
+that the checked-in JSON catalog and fallback catalog stay aligned.
+
 ## Preprocessing Contract
 
 Training and Android inference share this preprocessing contract:

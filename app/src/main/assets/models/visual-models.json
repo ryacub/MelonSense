@@ -1,4 +1,5 @@
 {
+  "id": "melonsense-visual-runtime-v0",
   "version": "runtime-v0",
   "preprocessing": {
     "imageSize": 96,

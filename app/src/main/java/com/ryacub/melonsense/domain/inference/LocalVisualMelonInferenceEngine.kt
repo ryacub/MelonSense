@@ -6,13 +6,14 @@ import com.ryacub.melonsense.domain.model.VisualScanResult
 import kotlinx.coroutines.CancellationException
 
 class LocalVisualMelonInferenceEngine(
+    private val catalog: LocalVisualModelCatalog = LocalVisualModelCatalog.fallback,
     private val visualModelScorer: LocalVisualModelScorer,
     private val fallbackEngine: MelonInferenceEngine = PlaceholderMelonInferenceEngine(),
 ) : MelonInferenceEngine {
     override val modelInfo: LocalModelInfo =
         LocalModelInfo(
-            id = LocalVisualModelCatalog.ID,
-            version = LocalVisualModelCatalog.VERSION,
+            id = catalog.id,
+            version = catalog.version,
             implementation = LocalModelImplementation.TrainedModel,
         )
 

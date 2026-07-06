@@ -34,6 +34,7 @@ import com.ryacub.melonsense.data.training.TrainingQueueItem
 import com.ryacub.melonsense.data.training.TrainingRetentionRepository
 import com.ryacub.melonsense.data.training.scheduleTrainingRetentionWork
 import com.ryacub.melonsense.domain.inference.LocalVisualMelonInferenceEngine
+import com.ryacub.melonsense.domain.inference.LocalVisualModelCatalog
 import com.ryacub.melonsense.domain.inference.LocalVisualModelScorer
 import com.ryacub.melonsense.domain.inference.PytorchVisualModelRunner
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
@@ -60,10 +61,16 @@ fun MelonSenseApp() {
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
     val inferenceEngine =
         remember(context) {
+            val modelCatalog =
+                LocalVisualModelCatalog.loadFromAssets { assetPath ->
+                    context.assets.open(assetPath).bufferedReader().use { reader -> reader.readText() }
+                }
             LocalVisualMelonInferenceEngine(
+                catalog = modelCatalog,
                 visualModelScorer =
                     LocalVisualModelScorer(
                         runner = PytorchVisualModelRunner(context),
+                        catalog = modelCatalog,
                     ),
             )
         }

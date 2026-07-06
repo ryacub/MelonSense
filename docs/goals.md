@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-7. Retraining pipeline using picked-history data
+8. Model replacement/versioning in app
 
 ## Queue
 
@@ -25,12 +25,11 @@
 
 ## Acceptance For Current Goal
 
-- Convert app picked-history feedback exports into interim training manifests.
-- Use only schema-versioned `user_feedback` rows.
-- Use photo artifacts as visual retraining samples.
-- Map five-point sweetness feedback into the binary sweetness track.
-- Preserve pick id, texture, scores, source artifact metadata, and label source in the manifest.
-- Allow visual baseline training to include converted picked-history manifests with `--extra-manifest`.
+- Treat `app/src/main/assets/models/visual-models.json` as the packaged visual model catalog source of truth.
+- Load catalog id, version, track assets, labels, byte sizes, and weights from the packaged manifest at app startup.
+- Report the loaded catalog id/version through `LocalModelInfo`.
+- Keep a validated fallback catalog so malformed packaged metadata does not prevent visual fallback behavior.
+- Document how to replace packaged `model_mobile.ptl` assets and bump the runtime catalog version.
 
 ## Known Tradeoffs
 

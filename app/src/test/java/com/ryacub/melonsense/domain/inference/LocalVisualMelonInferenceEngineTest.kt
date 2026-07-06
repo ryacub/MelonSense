@@ -19,6 +19,20 @@ class LocalVisualMelonInferenceEngineTest {
     }
 
     @Test
+    fun modelInfo_reportsInjectedCatalogVersion() {
+        val catalog =
+            LocalVisualModelCatalog(
+                id = "melonsense-visual-runtime-v1",
+                version = "runtime-v1",
+                tracks = LocalVisualModelCatalog.fallback.tracks,
+            )
+        val engine = localEngine(FakeVisualModelRunner(), catalog = catalog)
+
+        assertEquals("melonsense-visual-runtime-v1", engine.modelInfo.id)
+        assertEquals("runtime-v1", engine.modelInfo.version)
+    }
+
+    @Test
     fun scoreVisual_usesLocalScorerWhenPhotoIsAvailable() =
         runTest {
             val engine =
@@ -79,11 +93,16 @@ class LocalVisualMelonInferenceEngineTest {
             engine.scoreVisual(VisualInferenceInput(photoArtifact = sampleEnginePhotoArtifact()))
         }
 
-    private fun localEngine(runner: VisualModelRunner): LocalVisualMelonInferenceEngine =
+    private fun localEngine(
+        runner: VisualModelRunner,
+        catalog: LocalVisualModelCatalog = LocalVisualModelCatalog.fallback,
+    ): LocalVisualMelonInferenceEngine =
         LocalVisualMelonInferenceEngine(
+            catalog = catalog,
             visualModelScorer =
                 LocalVisualModelScorer(
                     runner = runner,
+                    catalog = catalog,
                     nowMillis = { 1234L },
                 ),
             fallbackEngine = PlaceholderMelonInferenceEngine(nowMillis = { 1234L }),

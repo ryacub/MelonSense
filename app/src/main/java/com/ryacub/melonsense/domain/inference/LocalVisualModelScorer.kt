@@ -50,13 +50,13 @@ data class VisualModelTrackPrediction(
 
 class LocalVisualModelScorer(
     private val runner: VisualModelRunner,
-    private val tracks: List<LocalVisualModelTrack> = LocalVisualModelCatalog.tracks,
+    private val catalog: LocalVisualModelCatalog = LocalVisualModelCatalog.fallback,
     private val inferenceDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
 ) {
     suspend fun score(photoArtifact: TrainingMediaArtifact): VisualScanResult =
         withContext(inferenceDispatcher) {
-            val outcomes = runner.predictAll(tracks, photoArtifact)
+            val outcomes = runner.predictAll(catalog.tracks, photoArtifact)
             val successfulPredictions =
                 outcomes.mapNotNull { outcome ->
                     outcome.prediction?.let { prediction -> outcome.track to prediction }
