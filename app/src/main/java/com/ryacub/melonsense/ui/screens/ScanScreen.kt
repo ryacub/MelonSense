@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
@@ -63,6 +64,8 @@ import kotlin.coroutines.resumeWithException
 @Composable
 fun ScanScreen(
     inferenceEngine: MelonInferenceEngine,
+    visualScanResult: VisualScanResult?,
+    onVisualScanResultChange: (VisualScanResult?) -> Unit,
     onStartKnockTest: (VisualScanResult) -> Unit,
 ) {
     val context = LocalContext.current
@@ -83,7 +86,27 @@ fun ScanScreen(
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
-    var visualScanResult by remember { mutableStateOf<VisualScanResult?>(null) }
+    var scanAssessmentWorkflow by remember {
+        mutableStateOf(
+            ScanAssessmentWorkflow(
+                state =
+                    if (visualScanResult != null) {
+                        ScanAssessmentState(ScanAssessmentPhase.Complete)
+                    } else {
+                        ScanAssessmentState()
+                    },
+                visualScanResult = visualScanResult,
+            ),
+        )
+    }
+
+    fun applyAssessmentEvent(
+        event: ScanAssessmentEvent,
+        result: VisualScanResult? = null,
+    ) {
+        scanAssessmentWorkflow = scanAssessmentWorkflow.reduce(event, result)
+        onVisualScanResultChange(scanAssessmentWorkflow.visualScanResult)
+    }
     val permissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             hasCameraPermission = granted
@@ -98,8 +121,13 @@ fun ScanScreen(
     if (hasCameraPermission) {
         ScanContent(
             cameraController = cameraController,
-            visualScanResult = visualScanResult,
+            scanAssessmentState = scanAssessmentWorkflow.state,
+            visualScanResult = scanAssessmentWorkflow.visualScanResult,
             onCaptureFrame = {
+                if (!scanAssessmentWorkflow.state.canCapture) {
+                    return@ScanContent
+                }
+                applyAssessmentEvent(ScanAssessmentEvent.CaptureRequested)
                 scope.launch {
                     val photoArtifact =
                         try {
@@ -111,18 +139,27 @@ fun ScanScreen(
                         } catch (exception: CancellationException) {
                             throw exception
                         } catch (exception: Exception) {
-                            null
+                            applyAssessmentEvent(ScanAssessmentEvent.CaptureFailed)
+                            return@launch
                         }
-                    visualScanResult =
-                        inferenceEngine.scoreVisual(
-                            VisualInferenceInput(
-                                photoArtifact = photoArtifact,
-                            ),
-                        )
+                    applyAssessmentEvent(ScanAssessmentEvent.CaptureSucceeded)
+                    try {
+                        val result =
+                            inferenceEngine.scoreVisual(
+                                VisualInferenceInput(
+                                    photoArtifact = photoArtifact,
+                                ),
+                            )
+                        applyAssessmentEvent(ScanAssessmentEvent.AnalysisSucceeded, result)
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        applyAssessmentEvent(ScanAssessmentEvent.AnalysisFailed)
+                    }
                 }
             },
             onStartKnockTest = {
-                visualScanResult?.let(onStartKnockTest)
+                scanAssessmentWorkflow.visualScanResult?.let(onStartKnockTest)
             },
         )
     } else {
@@ -137,6 +174,7 @@ fun ScanScreen(
 @Composable
 private fun ScanContent(
     cameraController: LifecycleCameraController,
+    scanAssessmentState: ScanAssessmentState,
     visualScanResult: VisualScanResult?,
     onCaptureFrame: () -> Unit,
     onStartKnockTest: () -> Unit,
@@ -161,7 +199,10 @@ private fun ScanContent(
             )
         }
 
-        VisualScanStatus(visualScanResult = visualScanResult)
+        VisualScanStatus(
+            scanAssessmentState = scanAssessmentState,
+            visualScanResult = visualScanResult,
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -170,6 +211,7 @@ private fun ScanContent(
             FilledTonalButton(
                 onClick = onCaptureFrame,
                 modifier = Modifier.weight(1f),
+                enabled = scanAssessmentState.canCapture,
             ) {
                 Icon(
                     imageVector = Icons.Filled.CameraAlt,
@@ -177,12 +219,12 @@ private fun ScanContent(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(stringResource(R.string.scan_primary_action))
+                Text(stringResource(scanAssessmentState.primaryActionRes))
             }
             Button(
                 onClick = onStartKnockTest,
                 modifier = Modifier.weight(1f),
-                enabled = visualScanResult != null,
+                enabled = scanAssessmentState.canStartKnockTest && visualScanResult != null,
             ) {
                 Text(stringResource(R.string.scan_continue_action))
             }
@@ -216,7 +258,10 @@ private fun CameraPreview(
 }
 
 @Composable
-private fun VisualScanStatus(visualScanResult: VisualScanResult?) {
+private fun VisualScanStatus(
+    scanAssessmentState: ScanAssessmentState,
+    visualScanResult: VisualScanResult?,
+) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -232,16 +277,20 @@ private fun VisualScanStatus(visualScanResult: VisualScanResult?) {
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = stringResource(R.string.scan_ready_state),
+                    text = stringResource(scanAssessmentState.titleRes),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
 
             Text(
-                text = stringResource(R.string.scan_body),
+                text = stringResource(scanAssessmentState.bodyRes),
                 style = MaterialTheme.typography.bodyMedium,
             )
+
+            if (scanAssessmentState.isBusy) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
 
             if (visualScanResult != null) {
                 Text(
@@ -256,6 +305,12 @@ private fun VisualScanStatus(visualScanResult: VisualScanResult?) {
                         ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                visualScanResult.evidence.forEach { evidence ->
+                    Text(
+                        text = evidence,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         }
     }

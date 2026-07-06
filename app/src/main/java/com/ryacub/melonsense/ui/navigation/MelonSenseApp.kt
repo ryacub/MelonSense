@@ -115,9 +115,21 @@ fun MelonSenseApp() {
         bottomBar = {
             NavigationBar {
                 MelonSenseDestination.entries.forEach { destination ->
+                    val destinationEnabled = !destination.requiresVisualResult || visualScanResult != null
                     NavigationBarItem(
                         selected = selectedDestination == destination,
+                        enabled = destinationEnabled,
                         onClick = {
+                            if (!destinationEnabled) {
+                                navController.navigate(MelonSenseDestination.Scan.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                                return@NavigationBarItem
+                            }
                             navController.navigate(destination.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
@@ -146,6 +158,10 @@ fun MelonSenseApp() {
             composable(MelonSenseDestination.Scan.route) {
                 ScanScreen(
                     inferenceEngine = inferenceEngine,
+                    visualScanResult = visualScanResult,
+                    onVisualScanResultChange = { result ->
+                        visualScanResult = result
+                    },
                     onStartKnockTest = { result ->
                         visualScanResult = result
                         navController.navigate(MelonSenseDestination.KnockTest.route)
@@ -153,14 +169,26 @@ fun MelonSenseApp() {
                 )
             }
             composable(MelonSenseDestination.KnockTest.route) {
-                KnockTestScreen(
-                    inferenceEngine = inferenceEngine,
-                    visualScanResult = visualScanResult,
-                    onAnalyzeResult = { result ->
-                        melonAssessmentResult = result
-                        navController.navigate(MelonSenseDestination.Result.route)
-                    },
-                )
+                val currentVisualScanResult = visualScanResult
+                if (currentVisualScanResult == null) {
+                    LaunchedEffect(Unit) {
+                        navController.navigate(MelonSenseDestination.Scan.route) {
+                            popUpTo(MelonSenseDestination.Scan.route) {
+                                inclusive = false
+                            }
+                            launchSingleTop = true
+                        }
+                    }
+                } else {
+                    KnockTestScreen(
+                        inferenceEngine = inferenceEngine,
+                        visualScanResult = currentVisualScanResult,
+                        onAnalyzeResult = { result ->
+                            melonAssessmentResult = result
+                            navController.navigate(MelonSenseDestination.Result.route)
+                        },
+                    )
+                }
             }
             composable(MelonSenseDestination.Result.route) {
                 ResultScreen(

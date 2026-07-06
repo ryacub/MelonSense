@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-1. Android local visual inference MVP
+2. Camera/photo assessment UX
 
 ## Queue
 
@@ -25,13 +25,12 @@
 
 ## Acceptance For Current Goal
 
-- Package the leakage-safe visual model artifacts in the Android app.
-- Run local visual inference from captured photo artifacts.
-- Convert local model labels and confidence into the existing `VisualScanResult`.
-- Use the full-frame runtime ripeness model for Android; keep annotation-crop ripeness for training research until a detector/cropper exists.
-- Preserve existing audio and final assessment behavior.
-- Fall back without crashing if photo/model inference is unavailable.
-- Add tests for model metadata and visual result mapping.
+- Make the scan screen an explicit picture-by-picture assessment workflow.
+- Show Ready, Capturing, Analyzing, Complete, and Failed states.
+- Disable duplicate capture and knock-test actions while capture/inference is running.
+- Show visual score, confidence, and local model evidence after analysis.
+- Provide a clear retake path after a result or capture failure.
+- Keep the flow visual-first, then navigate to knock test only after a completed visual result.
 
 ## Known Tradeoffs
 

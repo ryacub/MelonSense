@@ -8,8 +8,17 @@
     <string name="scan_headline">Frame a watermelon</string>
     <string name="scan_body">Hold steady and keep one watermelon clearly in view.</string>
     <string name="scan_primary_action">Capture Frame</string>
+    <string name="scan_retake_action">Retake Photo</string>
     <string name="scan_continue_action">Start Knock Test</string>
     <string name="scan_ready_state">Ready for best-frame capture</string>
+    <string name="scan_capturing_state">Capturing photo</string>
+    <string name="scan_analyzing_state">Analyzing photo</string>
+    <string name="scan_complete_state">Visual result ready</string>
+    <string name="scan_failed_state">Photo assessment failed</string>
+    <string name="scan_capturing_body">Keep the phone steady while the photo is saved.</string>
+    <string name="scan_analyzing_body">Running the local visual model on this photo.</string>
+    <string name="scan_complete_body">Review the visual signal, then continue to the knock test.</string>
+    <string name="scan_failed_body">The photo could not be assessed. Retake with one watermelon clearly visible.</string>
     <string name="scan_framing_hint">Keep one watermelon clearly in view</string>
     <string name="scan_visual_score">Visual score: %1$d</string>
     <string name="scan_visual_confidence">Visual confidence: %1$d%%</string>
