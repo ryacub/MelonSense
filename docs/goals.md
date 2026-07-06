@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-6. Feedback export for retraining
+7. Retraining pipeline using picked-history data
 
 ## Queue
 
@@ -25,13 +25,12 @@
 
 ## Acceptance For Current Goal
 
-- Build a training queue from picked history plus retained capture media.
-- Export only Rated picks with sweetness and texture feedback.
-- Copy retained photo/audio artifacts into a dataset bundle.
-- Write JSONL rows containing scores, user feedback labels, media metadata, and retention timestamps.
-- Stamp exported rows with schema version and `user_feedback` label source.
-- Reject empty exports so no blank dataset bundle is treated as training data.
-- Mark exported pick/capture rows as Exported after bundle creation.
+- Convert app picked-history feedback exports into interim training manifests.
+- Use only schema-versioned `user_feedback` rows.
+- Use photo artifacts as visual retraining samples.
+- Map five-point sweetness feedback into the binary sweetness track.
+- Preserve pick id, texture, scores, source artifact metadata, and label source in the manifest.
+- Allow visual baseline training to include converted picked-history manifests with `--extra-manifest`.
 
 ## Known Tradeoffs
 

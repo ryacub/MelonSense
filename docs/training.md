@@ -141,6 +141,34 @@ python3 -m tools.training.visual_baseline crop-audit \
   --samples-per-label 24
 ```
 
+## Picked-History Feedback
+
+The Android app exports picked-history feedback as `manifest.jsonl` bundles.
+Convert a bundle into an interim visual sweetness manifest before retraining:
+
+```sh
+python3 -m tools.training.picked_history_feedback \
+  --export-manifest /path/to/training-exports/dataset-<timestamp>/manifest.jsonl \
+  --output-manifest datasets/interim/picked-history-feedback-v0/manifest.jsonl
+```
+
+Then include the converted feedback in a sweetness run:
+
+```sh
+python3 -m tools.training.visual_baseline train \
+  --track sweetness \
+  --extra-manifest datasets/interim/picked-history-feedback-v0/manifest.jsonl
+```
+
+The converter only emits photo-backed records with app export
+`schemaVersion=1` and `labelSource=user_feedback`. Sweetness ratings map to
+the binary sweetness track as:
+
+```text
+Bland, Mild -> not_sweet
+Good, Sweet, VerySweet -> sweet
+```
+
 Each run writes:
 
 ```text

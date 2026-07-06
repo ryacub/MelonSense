@@ -820,12 +820,14 @@ def train_track(
     model_size: str,
     seed: int = 17,
     holdout_manifest_paths: list[Path] | None = None,
+    extra_manifest_paths: list[Path] | None = None,
 ) -> dict[str, Any]:
     if track not in TRACKS:
         raise ValueError(f"Unsupported track: {track}")
     config = TRACKS[track]
     labels = list(config["labels"])
     manifest_paths = [repo_root / manifest for manifest in config["manifests"]]
+    manifest_paths.extend(extra_manifest_paths or [])
     if config["sample_source"] == "annotation":
         samples = collect_annotation_samples(
             repo_root=repo_root,
@@ -1188,6 +1190,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     train_parser.add_argument("--model-size", choices=["small", "strong"], default="strong")
     train_parser.add_argument("--seed", type=int, default=17)
     train_parser.add_argument("--holdout-manifest", type=Path, action="append")
+    train_parser.add_argument("--extra-manifest", type=Path, action="append")
 
     manifest_parser = subcommands.add_parser("labeled-manifest", help="Write a labeled-only manifest.")
     add_common_args(manifest_parser)
@@ -1230,6 +1233,10 @@ def main(argv: list[str] | None = None) -> int:
             holdout_manifest_paths=[
                 (repo_root / manifest).resolve() if not manifest.is_absolute() else manifest
                 for manifest in (args.holdout_manifest or [])
+            ],
+            extra_manifest_paths=[
+                (repo_root / manifest).resolve() if not manifest.is_absolute() else manifest
+                for manifest in (args.extra_manifest or [])
             ],
         )
         print(json.dumps(summary, indent=2, sort_keys=True))

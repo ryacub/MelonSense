@@ -27,6 +27,19 @@ class VisualBaselineTest(unittest.TestCase):
         self.assertEqual("image", visual_baseline.TRACKS["runtime_ripeness"]["sample_source"])
         self.assertEqual(["ripe", "unripe"], visual_baseline.TRACKS["runtime_ripeness"]["labels"])
 
+    def test_parse_args_accepts_extra_training_manifest(self) -> None:
+        args = visual_baseline.parse_args(
+            [
+                "train",
+                "--track",
+                "sweetness",
+                "--extra-manifest",
+                "datasets/interim/picked-feedback/manifest.jsonl",
+            ],
+        )
+
+        self.assertEqual([Path("datasets/interim/picked-feedback/manifest.jsonl")], args.extra_manifest)
+
     def test_collect_image_samples_filters_to_allowed_labels(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
