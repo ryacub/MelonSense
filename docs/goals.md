@@ -69,6 +69,7 @@ weakest signal areas.
 - Targeted local search found no existing pulled app export bundle under the repo, `/tmp`, `~/Downloads`, or `~/Desktop`.
 - `adb devices -l` showed no connected Android device.
 - Current blocker: Goal 10 requires a real app-generated picked-history export bundle. That bundle depends on finishing the physical-device flow blocked in Goal 9, or manually providing an export copied from a device where camera and microphone capture work.
+- Added `python3 -m tools.training.real_data_loop` as the repeatable execution path for the first real-data loop once the missing export bundle exists. It validates the real export manifest, converts picked-history feedback, trains sweetness with the generated feedback manifest, and prints the Android candidate artifact path.
 
 ## Known Tradeoffs
 

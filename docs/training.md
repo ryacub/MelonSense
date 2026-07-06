@@ -160,6 +160,18 @@ python3 -m tools.training.visual_baseline train \
   --extra-manifest datasets/interim/picked-history-feedback-v0/manifest.jsonl
 ```
 
+Or run the first real-data loop in one command once a device export bundle has
+been pulled locally:
+
+```sh
+python3 -m tools.training.real_data_loop \
+  --export-manifest /path/to/training-exports/dataset-<timestamp>/manifest.jsonl
+```
+
+That command writes `datasets/interim/picked-history-feedback-v0/manifest.jsonl`,
+trains the sweetness track with it as an extra manifest, and prints the
+resulting Android candidate path.
+
 The converter only emits photo-backed records with app export
 `schemaVersion=1` and `labelSource=user_feedback`. Sweetness ratings map to
 the binary sweetness track as:
