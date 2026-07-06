@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-9. Device QA + first real feedback export dry run
+10. First real data loop
 
 ## Loop 1 Completed
 
@@ -35,12 +35,12 @@
 
 ## Acceptance For Current Goal
 
-- Build and install a debuggable app on an Android emulator or device.
-- Exercise the core picker path: camera capture, visual assessment, knock test, combined result, "I Picked This", history rating, and training export.
-- Pull the generated export bundle from app storage when a device permits it.
-- Run the picked-history converter against the exported manifest and confirm it produces a visual feedback manifest.
-- Record any device, permission, camera, audio, or export blockers with exact reproduction details.
-- If no emulator/device is available, stop with the build/install command evidence and the missing-environment blocker.
+- Start from at least one real app-generated `training-exports/<bundle>/manifest.jsonl` bundle containing user-rated picked-history feedback.
+- Convert the real bundle with `python3 -m tools.training.picked_history_feedback`.
+- Confirm the converted visual feedback manifest contains usable photo-backed sweetness records.
+- Run visual baseline training with the converted manifest via `--extra-manifest`.
+- Record the resulting metrics and Android candidate artifact path.
+- If no real export bundle is available, stop with the missing-data blocker and keep Goal 9's physical-device/microphone blocker linked.
 
 ## Loop 2 Purpose
 
@@ -49,7 +49,7 @@ the physical feedback loop: use the app on Android, collect real picked-history
 feedback, retrain from that feedback, replace the packaged model, and harden the
 weakest signal areas.
 
-## Current Goal Run Notes
+## Deferred Goal 9 Run Notes
 
 - `./gradlew :app:assembleStableDebug` succeeded on the Goal 9 worktree.
 - `adb devices -l` initially showed no connected devices.
@@ -62,7 +62,13 @@ weakest signal areas.
 - Knock Test screen rendered after visual capture and received the visual score.
 - Audio permission was granted, and `Capture Knock` executed without crash, but the emulator captured silence/near-silence: `Knock was too quiet: peak 8`.
 - Relaunching the AVD with audio enabled and playing a short host-side synthetic knock WAV during capture still produced `peak 8`.
-- Current blocker: the headless emulator cannot provide a usable microphone/knock signal, so combined result, "I Picked This", history rating, export bundle pull, and converter dry run remain blocked until a physical Android device or a working emulator audio-input path is available.
+- Deferred blocker: the headless emulator cannot provide a usable microphone/knock signal, so combined result, "I Picked This", history rating, export bundle pull, and converter dry run remain blocked until a physical Android device or a working emulator audio-input path is available.
+
+## Current Goal Run Notes
+
+- Targeted local search found no existing pulled app export bundle under the repo, `/tmp`, `~/Downloads`, or `~/Desktop`.
+- `adb devices -l` showed no connected Android device.
+- Current blocker: Goal 10 requires a real app-generated picked-history export bundle. That bundle depends on finishing the physical-device flow blocked in Goal 9, or manually providing an export copied from a device where camera and microphone capture work.
 
 ## Known Tradeoffs
 
