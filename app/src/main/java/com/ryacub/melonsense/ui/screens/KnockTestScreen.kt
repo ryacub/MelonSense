@@ -54,6 +54,7 @@ import com.ryacub.melonsense.domain.model.KnockCapture
 import com.ryacub.melonsense.domain.model.MelonAssessmentResult
 import com.ryacub.melonsense.domain.model.PendingTrainingMedia
 import com.ryacub.melonsense.domain.model.VisualScanResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,7 +77,7 @@ fun KnockTestScreen(
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
-    var isRecording by remember { mutableStateOf(false) }
+    var knockTestState by remember { mutableStateOf(KnockTestState()) }
     var lastCapture by remember { mutableStateOf<KnockCapture?>(null) }
     val validKnockWindows = remember { mutableStateListOf<CapturedKnockWindow>() }
     val validKnocks = validKnockWindows.map { window -> window.capture }
@@ -104,54 +105,71 @@ fun KnockTestScreen(
         visualScanResult = visualScanResult,
         validKnocks = validKnocks,
         lastCapture = lastCapture,
-        isRecording = isRecording,
+        knockTestState = knockTestState,
         onCaptureKnock = {
-            if (isRecording || validKnockWindows.size >= KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
+            if (!knockTestState.canCapture(validKnockWindows.size)) {
                 return@KnockTestContent
             }
+            knockTestState = knockTestState.reduce(KnockTestEvent.CaptureRequested)
             scope.launch {
-                isRecording = true
-                val window = captureKnockWindow()
-                lastCapture = window.capture
-                if (window.capture.isValid && validKnockWindows.size < KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
-                    validKnockWindows += window
+                try {
+                    val window = captureKnockWindow()
+                    lastCapture = window.capture
+                    if (window.capture.isValid && validKnockWindows.size < KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
+                        validKnockWindows += window
+                    }
+                    knockTestState = knockTestState.reduce(KnockTestEvent.CaptureFinished)
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (exception: Exception) {
+                    knockTestState = knockTestState.reduce(KnockTestEvent.CaptureFailed)
                 }
-                isRecording = false
             }
         },
         onAnalyzeResult = {
+            if (!knockTestState.canAnalyze(validKnockWindows.size)) {
+                return@KnockTestContent
+            }
+            knockTestState = knockTestState.reduce(KnockTestEvent.AnalyzeRequested)
             scope.launch {
-                val capturedAtMillis = System.currentTimeMillis()
-                val audioArtifact =
-                    mediaStore.saveCompressedAudioArtifact(
-                        samples = validKnockWindows.concatSamples(),
-                        sampleRateHz = KnockAudioAnalyzer.SAMPLE_RATE_HZ,
-                        capturedAtMillis = capturedAtMillis,
-                    )
-                val audioScanResult =
-                    inferenceEngine.scoreAudio(
-                        AudioInferenceInput(
-                            validKnocks = validKnocks,
+                try {
+                    val capturedAtMillis = System.currentTimeMillis()
+                    val audioArtifact =
+                        mediaStore.saveCompressedAudioArtifact(
+                            samples = validKnockWindows.concatSamples(),
+                            sampleRateHz = KnockAudioAnalyzer.SAMPLE_RATE_HZ,
+                            capturedAtMillis = capturedAtMillis,
+                        )
+                    val audioScanResult =
+                        inferenceEngine.scoreAudio(
+                            AudioInferenceInput(
+                                validKnocks = validKnocks,
+                                audioArtifact = audioArtifact,
+                            ),
+                        )
+                    val trainingMedia =
+                        PendingTrainingMedia(
+                            photoArtifact = visualScanResult?.photoArtifact,
                             audioArtifact = audioArtifact,
+                            createdAtMillis = capturedAtMillis,
+                            expiresAtMillis = capturedAtMillis + TRAINING_MEDIA_RETENTION_MILLIS,
+                        )
+                    onAnalyzeResult(
+                        inferenceEngine.assess(
+                            AssessmentInferenceInput(
+                                visualScanResult = visualScanResult,
+                                audioScanResult = audioScanResult,
+                                recommendation = recommendation,
+                                trainingMedia = trainingMedia,
+                            ),
                         ),
                     )
-                val trainingMedia =
-                    PendingTrainingMedia(
-                        photoArtifact = visualScanResult?.photoArtifact,
-                        audioArtifact = audioArtifact,
-                        createdAtMillis = capturedAtMillis,
-                        expiresAtMillis = capturedAtMillis + TRAINING_MEDIA_RETENTION_MILLIS,
-                    )
-                onAnalyzeResult(
-                    inferenceEngine.assess(
-                        AssessmentInferenceInput(
-                            visualScanResult = visualScanResult,
-                            audioScanResult = audioScanResult,
-                            recommendation = recommendation,
-                            trainingMedia = trainingMedia,
-                        ),
-                    ),
-                )
+                    knockTestState = knockTestState.reduce(KnockTestEvent.AnalyzeFinished)
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (exception: Exception) {
+                    knockTestState = knockTestState.reduce(KnockTestEvent.AnalyzeFailed)
+                }
             }
         },
     )
@@ -162,7 +180,7 @@ private fun KnockTestContent(
     visualScanResult: VisualScanResult?,
     validKnocks: List<KnockCapture>,
     lastCapture: KnockCapture?,
-    isRecording: Boolean,
+    knockTestState: KnockTestState,
     onCaptureKnock: () -> Unit,
     onAnalyzeResult: () -> Unit,
 ) {
@@ -190,7 +208,7 @@ private fun KnockTestContent(
         KnockProgressCard(
             validKnockCount = validKnockCount,
             lastCapture = lastCapture,
-            isRecording = isRecording,
+            knockTestState = knockTestState,
         )
 
         Row(
@@ -200,7 +218,7 @@ private fun KnockTestContent(
             FilledTonalButton(
                 onClick = onCaptureKnock,
                 modifier = Modifier.weight(1f),
-                enabled = !isRecording && validKnockCount < KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT,
+                enabled = knockTestState.canCapture(validKnockCount),
             ) {
                 Icon(
                     imageVector = Icons.Filled.GraphicEq,
@@ -210,7 +228,7 @@ private fun KnockTestContent(
                 Spacer(modifier = Modifier.size(8.dp))
                 Text(
                     text =
-                        if (isRecording) {
+                        if (knockTestState.isRecording) {
                             stringResource(R.string.knock_recording)
                         } else {
                             stringResource(R.string.knock_capture_action)
@@ -220,9 +238,17 @@ private fun KnockTestContent(
             Button(
                 onClick = onAnalyzeResult,
                 modifier = Modifier.weight(1f),
-                enabled = validKnockCount >= KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT,
+                enabled = knockTestState.canAnalyze(validKnockCount),
             ) {
-                Text(stringResource(R.string.knock_primary_action))
+                Text(
+                    stringResource(
+                        if (knockTestState.isAnalyzing) {
+                            R.string.knock_analyzing
+                        } else {
+                            R.string.knock_primary_action
+                        },
+                    ),
+                )
             }
         }
     }
@@ -250,7 +276,7 @@ private fun VisualSummary(visualScanResult: VisualScanResult?) {
 private fun KnockProgressCard(
     validKnockCount: Int,
     lastCapture: KnockCapture?,
-    isRecording: Boolean,
+    knockTestState: KnockTestState,
 ) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -270,9 +296,16 @@ private fun KnockProgressCard(
                     KnockSlot(index = index, isValid = index < validKnockCount)
                 }
             }
-            if (isRecording) {
+            if (knockTestState.isRecording || knockTestState.isAnalyzing) {
                 Text(
-                    text = stringResource(R.string.knock_recording),
+                    text =
+                        stringResource(
+                            if (knockTestState.isRecording) {
+                                R.string.knock_recording
+                            } else {
+                                R.string.knock_analyzing
+                            },
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )

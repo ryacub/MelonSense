@@ -34,6 +34,7 @@
     <string name="knock_permission_action">Allow Microphone</string>
     <string name="knock_capture_action">Capture Knock</string>
     <string name="knock_recording">Listening for knock...</string>
+    <string name="knock_analyzing">Analyzing knocks...</string>
     <string name="knock_progress">%1$d / 3 valid knocks</string>
     <string name="knock_slot_valid">Knock %1$d valid</string>
     <string name="knock_slot_waiting">Knock %1$d waiting</string>

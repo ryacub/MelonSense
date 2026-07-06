@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-3. History + "I Picked This"
+4. Knock-test audio MVP
 
 ## Queue
 
@@ -25,12 +25,13 @@
 
 ## Acceptance For Current Goal
 
-- Result screen shows the agreed `I Picked This` action only after an assessment result exists.
-- Tapping `I Picked This` saves one pending history row and navigates to History.
-- Duplicate taps are ignored while the pick is saving or already saved.
-- History lists picked melons with result label, visual/audio scores, and training export status.
-- History edit uses selectors for result label, sweetness, and texture; no free-form outcome input.
-- Saving outcome marks the pick Rated so it becomes eligible for retraining export when media is still available.
+- Request microphone permission before capture.
+- Capture short PCM knock windows with `AudioRecord`.
+- Accept only amplitude-valid knock windows and require three valid knocks.
+- Disable capture while recording and after three valid knocks.
+- Disable Analyze until three valid knocks are captured.
+- Disable duplicate Analyze while assessment is running.
+- Persist compressed audio media for retraining with the picked result.
 
 ## Known Tradeoffs
 
