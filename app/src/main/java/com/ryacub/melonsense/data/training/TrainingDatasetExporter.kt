@@ -34,6 +34,9 @@ data class TrainingDatasetBundle(
 )
 
 object TrainingDatasetExporter {
+    private const val SCHEMA_VERSION = 1
+    private const val LABEL_SOURCE = "user_feedback"
+
     fun buildQueue(
         historyItems: List<PickHistoryItem>,
         captures: List<TrainingCaptureEntity>,
@@ -60,6 +63,7 @@ object TrainingDatasetExporter {
         outputDirectory: File,
         createdAtMillis: Long,
     ): TrainingDatasetBundle {
+        require(eligibleItems.isNotEmpty()) { "Cannot export an empty training dataset." }
         val bundleDirectory = File(outputDirectory, "dataset-$createdAtMillis")
         val mediaDirectory = File(bundleDirectory, "media")
         mediaDirectory.mkdirs()
@@ -140,6 +144,10 @@ object TrainingDatasetExporter {
         val capture = requireNotNull(capture)
         return buildString {
             append("{")
+            appendProperty("schemaVersion", SCHEMA_VERSION)
+            append(",")
+            appendProperty("labelSource", LABEL_SOURCE)
+            append(",")
             appendProperty("pickHistoryId", item.id)
             append(",")
             appendProperty("createdAtMillis", item.createdAtMillis)

@@ -106,6 +106,8 @@ class TrainingDatasetExportTest {
 
         val bundleText = bundle.manifestFile.readText()
         assertEquals(1, bundle.entryCount)
+        assertTrue(bundleText.contains("\"schemaVersion\":1"))
+        assertTrue(bundleText.contains("\"labelSource\":\"user_feedback\""))
         assertTrue(bundleText.contains("\"pickHistoryId\":42"))
         assertTrue(bundleText.contains("\"resultLabel\":\"GoodCandidate\""))
         assertTrue(bundleText.contains("\"sweetness\":\"Sweet\""))
@@ -117,6 +119,15 @@ class TrainingDatasetExportTest {
         assertTrue(bundleText.contains(photoFile.absolutePath))
         assertTrue(bundleText.contains(audioFile.absolutePath))
         assertTrue(bundle.manifestFile.parentFile?.resolve("media")?.listFiles().orEmpty().size == 2)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun writeBundle_rejectsEmptyExport() {
+        TrainingDatasetExporter.writeBundle(
+            eligibleItems = emptyList(),
+            outputDirectory = temporaryFolder.newFolder("exports"),
+            createdAtMillis = 3_000,
+        )
     }
 
     private fun sampleHistoryItem(

@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-5. Combined visual/audio scoring
+6. Feedback export for retraining
 
 ## Queue
 
@@ -25,12 +25,13 @@
 
 ## Acceptance For Current Goal
 
-- Combine visual and audio scores behind the local inference boundary.
-- Preserve audio-only assessment behavior if visual input is missing.
-- Derive final confidence from the same weighted visual/audio policy.
-- Derive result label and recommendation copy from the combined score.
-- Remove caller-provided recommendation copy from the assessment input contract.
-- Keep picked-history storage using typed result labels instead of display text.
+- Build a training queue from picked history plus retained capture media.
+- Export only Rated picks with sweetness and texture feedback.
+- Copy retained photo/audio artifacts into a dataset bundle.
+- Write JSONL rows containing scores, user feedback labels, media metadata, and retention timestamps.
+- Stamp exported rows with schema version and `user_feedback` label source.
+- Reject empty exports so no blank dataset bundle is treated as training data.
+- Mark exported pick/capture rows as Exported after bundle creation.
 
 ## Known Tradeoffs
 
