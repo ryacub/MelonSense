@@ -43,7 +43,6 @@
     <string name="knock_score">Audio score: %1$d</string>
     <string name="knock_confidence">Audio confidence: %1$d%%</string>
     <string name="knock_primary_action">Analyze Result</string>
-    <string name="result_headline">Good Candidate</string>
     <string name="result_missing">No assessment result yet. Start with Scan and Knock Test.</string>
     <string name="result_recommendation">Recommendation: %1$s</string>
     <string name="result_confidence">Confidence: %1$d%%</string>

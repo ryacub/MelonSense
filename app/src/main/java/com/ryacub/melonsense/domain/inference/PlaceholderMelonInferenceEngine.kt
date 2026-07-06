@@ -59,11 +59,12 @@ class PlaceholderMelonInferenceEngine(
                     audioValue = input.audioScanResult.confidencePercent,
                 )
 
+            val resultLabel = combinedScore.toResultLabel()
             MelonAssessmentResult(
                 visualScanResult = input.visualScanResult,
                 audioScanResult = input.audioScanResult,
-                recommendation = input.recommendation,
-                resultLabel = combinedScore.toResultLabel(),
+                recommendation = resultLabel.recommendation,
+                resultLabel = resultLabel,
                 confidencePercent = finalConfidence,
                 trainingMedia = input.trainingMedia,
             )
@@ -86,4 +87,13 @@ class PlaceholderMelonInferenceEngine(
             this >= 55 -> ResultLabel.Maybe
             else -> ResultLabel.Skip
         }
+
+    private val ResultLabel.recommendation: String
+        get() =
+            when (this) {
+                ResultLabel.StrongPick -> "Strong Pick"
+                ResultLabel.GoodCandidate -> "Good Candidate"
+                ResultLabel.Maybe -> "Maybe"
+                ResultLabel.Skip -> "Skip"
+            }
 }

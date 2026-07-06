@@ -97,7 +97,6 @@ class PlaceholderMelonInferenceEngineTest {
                                 capturedAtMillis = 1_100,
                                 evidence = emptyList(),
                             ),
-                        recommendation = "Strong Pick",
                         trainingMedia = trainingMedia,
                     ),
                 )
@@ -124,13 +123,51 @@ class PlaceholderMelonInferenceEngineTest {
                                 capturedAtMillis = 1_100,
                                 evidence = emptyList(),
                             ),
-                        recommendation = "Strong Pick",
                         trainingMedia = null,
                     ),
                 )
 
             assertEquals(ResultLabel.StrongPick, assessment.resultLabel)
             assertEquals(88, assessment.confidencePercent)
+        }
+
+    @Test
+    fun assess_derivesRecommendationFromCombinedScore() =
+        runTest {
+            val assessment =
+                engine.assess(
+                    AssessmentInferenceInput(
+                        visualScanResult =
+                            VisualScanResult(
+                                score = 30,
+                                confidencePercent = 50,
+                                capturedAtMillis = 1_000,
+                                evidence = emptyList(),
+                            ),
+                        audioScanResult =
+                            AudioScanResult(
+                                score = 42,
+                                confidencePercent = 60,
+                                validKnocks = 3,
+                                estimatedFrequencyHz = 110,
+                                capturedAtMillis = 1_100,
+                                evidence = emptyList(),
+                            ),
+                        trainingMedia = null,
+                    ),
+                )
+
+            assertEquals(ResultLabel.Skip, assessment.resultLabel)
+            assertEquals("Skip", assessment.recommendation)
+        }
+
+    @Test
+    fun assess_mapsCombinedScoreThresholdsToRecommendationCopy() =
+        runTest {
+            assertEquals("Strong Pick", assessmentFor(score = 85).recommendation)
+            assertEquals("Good Candidate", assessmentFor(score = 70).recommendation)
+            assertEquals("Maybe", assessmentFor(score = 55).recommendation)
+            assertEquals("Skip", assessmentFor(score = 54).recommendation)
         }
 
     private fun samplePhotoArtifact(): TrainingMediaArtifact =
@@ -159,5 +196,22 @@ class PlaceholderMelonInferenceEngineTest {
             height = null,
             sampleRateHz = 44_100,
             durationMillis = 750,
+        )
+
+    private suspend fun assessmentFor(score: Int): MelonAssessmentResult =
+        engine.assess(
+            AssessmentInferenceInput(
+                visualScanResult = null,
+                audioScanResult =
+                    AudioScanResult(
+                        score = score,
+                        confidencePercent = 80,
+                        validKnocks = 3,
+                        estimatedFrequencyHz = 140,
+                        capturedAtMillis = 1_100,
+                        evidence = emptyList(),
+                    ),
+                trainingMedia = null,
+            ),
         )
 }

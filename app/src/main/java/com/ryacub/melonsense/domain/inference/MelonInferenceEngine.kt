@@ -40,6 +40,5 @@ data class AudioInferenceInput(
 data class AssessmentInferenceInput(
     val visualScanResult: VisualScanResult?,
     val audioScanResult: AudioScanResult,
-    val recommendation: String,
     val trainingMedia: PendingTrainingMedia?,
 )

@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-4. Knock-test audio MVP
+5. Combined visual/audio scoring
 
 ## Queue
 
@@ -25,13 +25,12 @@
 
 ## Acceptance For Current Goal
 
-- Request microphone permission before capture.
-- Capture short PCM knock windows with `AudioRecord`.
-- Accept only amplitude-valid knock windows and require three valid knocks.
-- Disable capture while recording and after three valid knocks.
-- Disable Analyze until three valid knocks are captured.
-- Disable duplicate Analyze while assessment is running.
-- Persist compressed audio media for retraining with the picked result.
+- Combine visual and audio scores behind the local inference boundary.
+- Preserve audio-only assessment behavior if visual input is missing.
+- Derive final confidence from the same weighted visual/audio policy.
+- Derive result label and recommendation copy from the combined score.
+- Remove caller-provided recommendation copy from the assessment input contract.
+- Keep picked-history storage using typed result labels instead of display text.
 
 ## Known Tradeoffs
 

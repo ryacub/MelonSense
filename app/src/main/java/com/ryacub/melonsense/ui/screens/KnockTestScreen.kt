@@ -68,7 +68,6 @@ fun KnockTestScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
-    val recommendation = stringResource(R.string.result_headline)
     var hasAudioPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -159,7 +158,6 @@ fun KnockTestScreen(
                             AssessmentInferenceInput(
                                 visualScanResult = visualScanResult,
                                 audioScanResult = audioScanResult,
-                                recommendation = recommendation,
                                 trainingMedia = trainingMedia,
                             ),
                         ),
