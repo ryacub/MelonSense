@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-2. Camera/photo assessment UX
+3. History + "I Picked This"
 
 ## Queue
 
@@ -25,12 +25,12 @@
 
 ## Acceptance For Current Goal
 
-- Make the scan screen an explicit picture-by-picture assessment workflow.
-- Show Ready, Capturing, Analyzing, Complete, and Failed states.
-- Disable duplicate capture and knock-test actions while capture/inference is running.
-- Show visual score, confidence, and local model evidence after analysis.
-- Provide a clear retake path after a result or capture failure.
-- Keep the flow visual-first, then navigate to knock test only after a completed visual result.
+- Result screen shows the agreed `I Picked This` action only after an assessment result exists.
+- Tapping `I Picked This` saves one pending history row and navigates to History.
+- Duplicate taps are ignored while the pick is saving or already saved.
+- History lists picked melons with result label, visual/audio scores, and training export status.
+- History edit uses selectors for result label, sweetness, and texture; no free-form outcome input.
+- Saving outcome marks the pick Rated so it becomes eligible for retraining export when media is still available.
 
 ## Known Tradeoffs
 

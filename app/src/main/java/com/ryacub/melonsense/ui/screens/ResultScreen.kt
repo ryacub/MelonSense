@@ -20,6 +20,7 @@ import com.ryacub.melonsense.domain.model.MelonAssessmentResult
 @Composable
 fun ResultScreen(
     assessmentResult: MelonAssessmentResult?,
+    pickedAssessmentSaveState: PickedAssessmentSaveState,
     onPickedThis: () -> Unit,
 ) {
     Column(
@@ -48,8 +49,9 @@ fun ResultScreen(
         Button(
             onClick = onPickedThis,
             modifier = Modifier.fillMaxWidth(),
+            enabled = pickedAssessmentSaveState.canSave,
         ) {
-            Text(stringResource(R.string.result_primary_action))
+            Text(stringResource(pickedAssessmentSaveState.actionRes))
         }
     }
 }

@@ -51,6 +51,8 @@
     <string name="result_audio_knocks">Valid knocks: %1$d / 3</string>
     <string name="result_audio_frequency">Estimated resonance: %1$d Hz</string>
     <string name="result_primary_action">I Picked This</string>
+    <string name="result_saving_action">Saving Pick</string>
+    <string name="result_saved_action">Pick Saved</string>
     <string name="history_headline">Picked melons</string>
     <string name="history_body">Pending Outcome, Rated, and Expired Media entries will appear here.</string>
     <string name="history_empty">Picked melons will appear here after you tap I Picked This.</string>
