@@ -55,7 +55,14 @@ weakest signal areas.
 - `adb devices -l` initially showed no connected devices.
 - AVD `R645_API36_PlayStore` exists locally.
 - Launching `R645_API36_PlayStore` with `-no-window -no-snapshot-load -no-audio -no-boot-anim` briefly exposed `emulator-5554` as `offline`, then the emulator disappeared from adb before `sys.boot_completed=1`.
-- Current blocker: no booted Android runtime is available for install, camera, audio, history, or export QA.
+- Removing stale AVD lock files and launching with `-no-window -gpu swiftshader_indirect -no-snapshot-load -no-audio -no-boot-anim` booted the emulator successfully.
+- Installing the universal `app-stable-debug.apk` failed with `INSTALL_FAILED_INSUFFICIENT_STORAGE`; the APK is about 252 MB and the AVD had about 636 MB free under `/data`.
+- A temporary arm64-only QA APK was created outside the repo at `/tmp/melonsense-arm64-debug.apk` by removing non-arm64 native libraries and re-signing with the debug keystore. Size was about 78 MB and install succeeded.
+- App launch, Scan screen rendering, camera permission, photo capture, local visual inference, and visual evidence rendering passed on `emulator-5554`.
+- Knock Test screen rendered after visual capture and received the visual score.
+- Audio permission was granted, and `Capture Knock` executed without crash, but the emulator captured silence/near-silence: `Knock was too quiet: peak 8`.
+- Relaunching the AVD with audio enabled and playing a short host-side synthetic knock WAV during capture still produced `peak 8`.
+- Current blocker: the headless emulator cannot provide a usable microphone/knock signal, so combined result, "I Picked This", history rating, export bundle pull, and converter dry run remain blocked until a physical Android device or a working emulator audio-input path is available.
 
 ## Known Tradeoffs
 
