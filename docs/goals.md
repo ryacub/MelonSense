@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-13. Overripe class data strategy
+14. Android packaging size pass
 
 ## Loop 1 Completed
 
@@ -29,19 +29,19 @@
 10. First real data loop
 11. Model quality evaluation and threshold tuning
 12. Audio model hardening with labeled knock samples
+13. Overripe class data strategy
 
 ## Loop 2 Queue
 
-13. Overripe class data strategy
 14. Android packaging size pass
 15. Training and QA runbook polish
 
 ## Acceptance For Current Goal
 
-- Identify usable public and app-collected overripe sources.
-- Decide whether overripe can be included in the packaged visual model now.
-- Preserve the current binary runtime behavior if overripe data is not strong enough.
-- Document the minimum data gate for adding overripe back to runtime scoring.
+- Measure current APK/native-library size contributors.
+- Decide whether ABI-specific packaging, PyTorch Lite retention, or another runtime path should change before MVP.
+- Keep local inference working while reducing avoidable install friction.
+- Document the packaging tradeoff and next size gate.
 
 ## Loop 2 Purpose
 
@@ -90,11 +90,15 @@ weakest signal areas.
 - Audio score/confidence stay conservative when fewer than three valid knocks exist or when valid knocks have inconsistent estimated frequencies.
 - Picked-history export conversion can now write `datasets/interim/picked-history-audio-v0/manifest.jsonl` via `--audio-output-manifest`.
 - Do not package a trained audio model yet. Current usable audio data is emulator-generated and only proves plumbing, not model quality.
+- Goal 13 completed. See `docs/overripe-class-strategy.md`.
+- Runtime ripeness stays binary (`ripe`, `unripe`) because the only verified watermelon overripe public source is the small 73-image Roboflow FYP dataset and app picked-history data does not collect a clean overripe label.
+- `roboflow-new-workspace-watermelon` was added as a large binary/semi-ripe candidate source, but it has no overripe class.
+- Add `overripe` to Android runtime only after the documented gate is met: audited full-frame class balance, physical-phone holdout, leakage-safe split, validation/holdout macro F1, and conservative overripe error behavior.
 
 ## Known Tradeoffs
 
 - PyTorch Lite makes the debug APK large because it packages native runtime libraries for multiple ABIs. Keep this acceptable for the MVP, then revisit TFLite or ABI-specific packaging during the Android packaging size pass.
 - The packaged model instrumentation smoke test compiles in CI/local builds, but executing it requires an attached Android device or emulator.
-- Runtime ripeness is currently binary (`ripe`, `unripe`) because the full-frame labeled source data does not have a usable overripe class. Add overripe back after collecting or deriving full-frame overripe data.
+- Runtime ripeness is currently binary (`ripe`, `unripe`) because the full-frame labeled source data does not have a usable overripe class. Add overripe back only after the gate in `docs/overripe-class-strategy.md`.
 - Knock scoring is heuristic until real labeled audio samples exist.
 - First retraining from picked-history data needs real user-rated photos; synthetic or public-only data is not enough to validate the personal picker loop.

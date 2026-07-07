@@ -42,6 +42,11 @@ ripe
 unripe
 ```
 
+Do not package a three-class Android runtime ripeness model until the overripe
+data gate in `docs/overripe-class-strategy.md` is met. The research `ripeness`
+track can keep evaluating `overripe` crops, but packaged runtime should remain
+binary while overripe has too few audited full-frame examples.
+
 Records labeled `unknown`, `mixed`, `watermelon_detection_only`,
 `watermelon_generic`, and `fruit_detection_other` are excluded from these two
 baseline classifiers.
@@ -80,6 +85,11 @@ Scarce grouped classes are kept leakage-safe even when they cannot be balanced
 across all splits. For the current public ripeness data, overripe has only a
 small number of source-image groups, so the summary must be checked before
 treating overripe validation/test metrics as representative.
+
+For runtime packaging, do not rely only on validation/test splits from public
+Roboflow exports. A future overripe runtime candidate needs a physical-phone
+holdout manifest excluded from training, and both validation and holdout macro
+F1 must clear the gate recorded in `docs/overripe-class-strategy.md`.
 
 ## Commands
 
