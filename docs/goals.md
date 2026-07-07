@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-14. Android packaging size pass
+15. Training and QA runbook polish
 
 ## Loop 1 Completed
 
@@ -30,18 +30,18 @@
 11. Model quality evaluation and threshold tuning
 12. Audio model hardening with labeled knock samples
 13. Overripe class data strategy
+14. Android packaging size pass
 
 ## Loop 2 Queue
 
-14. Android packaging size pass
 15. Training and QA runbook polish
 
 ## Acceptance For Current Goal
 
-- Measure current APK/native-library size contributors.
-- Decide whether ABI-specific packaging, PyTorch Lite retention, or another runtime path should change before MVP.
-- Keep local inference working while reducing avoidable install friction.
-- Document the packaging tradeoff and next size gate.
+- Consolidate training, data procurement, emulator QA, and packaging docs into a final MVP runbook.
+- Make the next physical-device/data-collection steps obvious.
+- Preserve links to detailed goal docs without duplicating stale commands.
+- Document remaining blockers and explicit next-loop candidates.
 
 ## Loop 2 Purpose
 
@@ -94,10 +94,16 @@ weakest signal areas.
 - Runtime ripeness stays binary (`ripe`, `unripe`) because the only verified watermelon overripe public source is the small 73-image Roboflow FYP dataset and app picked-history data does not collect a clean overripe label.
 - `roboflow-new-workspace-watermelon` was added as a large binary/semi-ripe candidate source, but it has no overripe class.
 - Add `overripe` to Android runtime only after the documented gate is met: audited full-frame class balance, physical-phone holdout, leakage-safe split, validation/holdout macro F1, and conservative overripe error behavior.
+- Goal 14 completed. See `docs/android-packaging-size.md`.
+- Current universal stable debug APK is `264,698,771` bytes / about `252 MB`.
+- Native libraries account for `243,851,488` uncompressed bytes; PyTorch Lite native libraries are the dominant contributor.
+- Model assets are small by comparison: packaged visual models total about `1.1 MB`.
+- ABI split APKs are enabled while keeping the universal APK fallback. Measured split APKs: arm64 `82,245,023` bytes / `78 MB`, armeabi-v7a `69,054,523` bytes / `66 MB`, x86 `89,092,379` bytes / `85 MB`, x86_64 `86,275,565` bytes / `82 MB`.
+- Keep PyTorch Lite for MVP. Revisit TFLite/runtime migration only if arm64 exceeds `120 MB`, app-bundle distribution becomes a goal, or PyTorch blocks target-device install.
 
 ## Known Tradeoffs
 
-- PyTorch Lite makes the debug APK large because it packages native runtime libraries for multiple ABIs. Keep this acceptable for the MVP, then revisit TFLite or ABI-specific packaging during the Android packaging size pass.
+- PyTorch Lite makes the universal APK large because it packages native runtime libraries for multiple ABIs. ABI split APKs are now available for sideload and emulator QA; keep PyTorch Lite for MVP.
 - The packaged model instrumentation smoke test compiles in CI/local builds, but executing it requires an attached Android device or emulator.
 - Runtime ripeness is currently binary (`ripe`, `unripe`) because the full-frame labeled source data does not have a usable overripe class. Add overripe back only after the gate in `docs/overripe-class-strategy.md`.
 - Knock scoring is heuristic until real labeled audio samples exist.

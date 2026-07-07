@@ -27,18 +27,12 @@ adb emu avd hostmicon
 ```
 
 The universal debug APK can still fail install on this AVD with
-`INSTALL_FAILED_INSUFFICIENT_STORAGE`. For emulator QA, a temporary arm64-only
-APK works:
+`INSTALL_FAILED_INSUFFICIENT_STORAGE`. For emulator QA, use the generated
+arm64 split APK:
 
 ```sh
-cp app/build/outputs/apk/stable/debug/app-stable-debug.apk /tmp/melonsense-arm64-media-qa.apk
-zip -d /tmp/melonsense-arm64-media-qa.apk 'lib/armeabi-v7a/*' 'lib/x86/*' 'lib/x86_64/*'
-"$HOME/Library/Android/sdk/build-tools/37.0.0/apksigner" sign \
-  --ks "$HOME/.android/debug.keystore" \
-  --ks-pass pass:android \
-  --key-pass pass:android \
-  /tmp/melonsense-arm64-media-qa.apk
-adb install -r /tmp/melonsense-arm64-media-qa.apk
+./gradlew :app:assembleStableDebug
+adb install -r app/build/outputs/apk/stable/debug/app-stable-arm64-v8a-debug.apk
 ```
 
 For knock capture, host audio worked only after raising host input/output volume
@@ -142,5 +136,5 @@ is changed and retested.
   not visible in the default camera view during this run.
 - The History outcome save updated persisted state, but the edit screen did not
   visually exit edit mode until app restart. Treat this as a separate UX/QA bug.
-- PyTorch native libraries make the universal APK too large for this AVD; the
-  packaging-size goal still matters.
+- PyTorch native libraries still make the universal APK too large for this AVD.
+  Use ABI split APKs for emulator and device sideloads.
