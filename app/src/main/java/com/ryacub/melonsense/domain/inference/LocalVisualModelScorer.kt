@@ -98,21 +98,41 @@ class LocalVisualModelScorer(
             )
         }
 
-    private fun VisualModelPrediction.toPickScore(track: LocalVisualModelTrack): Int =
-        when (track.id) {
-            "ripeness" ->
-                when (label) {
-                    "ripe" -> 92
-                    "unripe" -> 48
-                    "overripe" -> 34
-                    else -> 50
-                }
-            "sweetness" ->
-                when (label) {
-                    "sweet" -> 86
-                    "not_sweet" -> 58
-                    else -> 50
-                }
-            else -> 50
-        }
+    private fun VisualModelPrediction.toPickScore(track: LocalVisualModelTrack): Int {
+        val rawScore =
+            when (track.id) {
+                "ripeness" ->
+                    when (label) {
+                        "ripe" -> 92
+                        "unripe" -> 48
+                        "overripe" -> 34
+                        else -> 50
+                    }
+                "sweetness" ->
+                    when (label) {
+                        "sweet" -> 86
+                        "not_sweet" -> 58
+                        else -> 50
+                    }
+                else -> 50
+            }
+        return confidenceAdjustedScore(rawScore, track.labels.size)
+    }
+
+    private fun VisualModelPrediction.confidenceAdjustedScore(
+        rawScore: Int,
+        labelCount: Int,
+    ): Int =
+        (NEUTRAL_PICK_SCORE + ((rawScore - NEUTRAL_PICK_SCORE) * certaintyAboveRandom(labelCount)))
+            .roundToInt()
+            .coerceIn(0, 100)
+
+    private fun VisualModelPrediction.certaintyAboveRandom(labelCount: Int): Float {
+        val randomBaseline = 100f / labelCount.coerceAtLeast(1)
+        return ((confidencePercent - randomBaseline) / (100f - randomBaseline)).coerceIn(0f, 1f)
+    }
+
+    private companion object {
+        const val NEUTRAL_PICK_SCORE = 50
+    }
 }

@@ -110,12 +110,33 @@ class LocalVisualModelScorerTest {
 
             val result = scorer.score(samplePhotoArtifact())
 
-            assertEquals(90, result.score)
+            assertEquals(70, result.score)
             assertEquals(74, result.confidencePercent)
             assertEquals(1234L, result.capturedAtMillis)
             assertEquals(samplePhotoArtifact(), result.photoArtifact)
             assertTrue(result.evidence.contains("ripeness: ripe (80%)"))
             assertTrue(result.evidence.contains("sweetness: sweet (60%)"))
+        }
+
+    @Test
+    fun score_pullsLowConfidencePositivePredictionsTowardNeutral() =
+        runTest {
+            val scorer =
+                LocalVisualModelScorer(
+                    runner =
+                        FakeVisualModelRunner(
+                            predictions =
+                                mapOf(
+                                    "ripeness" to VisualModelPrediction(label = "ripe", confidencePercent = 52),
+                                    "sweetness" to VisualModelPrediction(label = "sweet", confidencePercent = 51),
+                                ),
+                        ),
+                )
+
+            val result = scorer.score(samplePhotoArtifact())
+
+            assertEquals(52, result.score)
+            assertEquals(52, result.confidencePercent)
         }
 
     @Test
@@ -136,7 +157,7 @@ class LocalVisualModelScorerTest {
 
             val result = scorer.score(samplePhotoArtifact())
 
-            assertEquals(48, result.score)
+            assertEquals(49, result.score)
             assertEquals(70, result.confidencePercent)
             assertTrue(result.evidence.contains("sweetness: unavailable"))
         }

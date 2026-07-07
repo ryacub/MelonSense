@@ -48,7 +48,7 @@ class LocalVisualMelonInferenceEngineTest {
 
             val result = engine.scoreVisual(VisualInferenceInput(photoArtifact = sampleEnginePhotoArtifact()))
 
-            assertEquals(90, result.score)
+            assertEquals(70, result.score)
             assertEquals(74, result.confidencePercent)
             assertTrue(result.evidence.contains("ripeness: ripe (80%)"))
         }
