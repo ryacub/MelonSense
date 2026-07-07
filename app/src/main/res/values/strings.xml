@@ -49,7 +49,7 @@
     <string name="result_visual_score">Visual score: %1$d</string>
     <string name="result_audio_score">Audio score: %1$d</string>
     <string name="result_audio_knocks">Valid knocks: %1$d / 3</string>
-    <string name="result_audio_frequency">Estimated resonance: %1$d Hz</string>
+    <string name="result_audio_frequency">Estimated knock frequency: %1$d Hz</string>
     <string name="result_primary_action">I Picked This</string>
     <string name="result_saving_action">Saving Pick</string>
     <string name="result_saved_action">Pick Saved</string>

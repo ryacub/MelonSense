@@ -25,25 +25,26 @@ object KnockAudioAnalyzer {
 
     fun buildAudioScanResult(validKnocks: List<KnockCapture>): AudioScanResult {
         val averagePeak = validKnocks.map { it.peakAmplitude }.averageOrZero()
-        val averageFrequency = validKnocks.map { it.estimatedFrequencyHz }.averageOrZero().toInt()
-        val score =
-            (56 + validKnocks.size * 8 + (averagePeak / 700).toInt())
-                .coerceIn(0, 100)
-        val confidence =
-            (42 + validKnocks.size * 14 + if (averageFrequency > 0) 8 else 0)
-                .coerceIn(0, 100)
+        val averageRms = validKnocks.map { it.rmsAmplitude }.averageOrZero()
+        val frequencyStats = validKnocks.frequencyStats()
+        val score = validKnocks.pickScore(averagePeak, averageRms, frequencyStats)
+        val confidence = validKnocks.confidencePercent(frequencyStats)
 
         return AudioScanResult(
             score = score,
             confidencePercent = confidence,
             validKnocks = validKnocks.size,
-            estimatedFrequencyHz = averageFrequency,
+            estimatedFrequencyHz = frequencyStats.averageFrequencyHz,
             capturedAtMillis = System.currentTimeMillis(),
             evidence =
                 listOf(
-                    "Three amplitude-valid knock windows captured",
-                    "Estimated resonance placeholder: $averageFrequency Hz",
-                    "FFT-style scoring placeholder ready for refinement",
+                    "${validKnocks.size} amplitude-valid knock windows captured",
+                    "Average peak amplitude: ${averagePeak.toInt()}",
+                    "Average RMS amplitude: ${averageRms.toInt()}",
+                    "Estimated knock frequency: ${frequencyStats.averageFrequencyHz} Hz",
+                    "Measured frequencies: ${frequencyStats.measuredCount} / ${validKnocks.size}",
+                    "Frequency spread: ${frequencyStats.spreadLabel()}",
+                    validKnocks.readinessEvidence(frequencyStats),
                 ),
         )
     }
@@ -75,4 +76,83 @@ object KnockAudioAnalyzer {
     }
 
     private fun List<Int>.averageOrZero(): Double = if (isEmpty()) 0.0 else average()
+
+    private fun List<KnockCapture>.frequencyStats(): FrequencyStats {
+        val frequencies = map { it.estimatedFrequencyHz }.filter { it > 0 }
+        val spreadHz =
+            if (frequencies.size < REQUIRED_KNOCK_COUNT) {
+                null
+            } else {
+                requireNotNull(frequencies.maxOrNull()) - requireNotNull(frequencies.minOrNull())
+            }
+        return FrequencyStats(
+            measuredCount = frequencies.size,
+            averageFrequencyHz = frequencies.averageOrZero().toInt(),
+            spreadHz = spreadHz,
+        )
+    }
+
+    private fun List<KnockCapture>.pickScore(
+        averagePeak: Double,
+        averageRms: Double,
+        frequencyStats: FrequencyStats,
+    ): Int {
+        if (size < REQUIRED_KNOCK_COUNT) {
+            return (35 + size * 5 + ((averagePeak - KNOCK_PEAK_THRESHOLD) / 550).toInt())
+                .coerceIn(0, 54)
+        }
+
+        val peakScore = ((averagePeak - KNOCK_PEAK_THRESHOLD) / 250).toInt().coerceIn(0, 25)
+        val rmsScore = ((averageRms - 800) / 120).toInt().coerceIn(0, 10)
+        return (40 + peakScore + rmsScore + frequencyConsistencyScore(frequencyStats)).coerceIn(0, 100)
+    }
+
+    private fun List<KnockCapture>.confidencePercent(frequencyStats: FrequencyStats): Int {
+        if (size < REQUIRED_KNOCK_COUNT) {
+            return (24 + size * 8 + if (frequencyStats.averageFrequencyHz > 0) 4 else 0).coerceIn(0, 49)
+        }
+
+        return (
+            35 +
+                size * 10 +
+                (if (frequencyStats.averageFrequencyHz > 0) 10 else 0) +
+                frequencyConsistencyConfidence(frequencyStats)
+        ).coerceIn(0, 100)
+    }
+
+    private fun frequencyConsistencyScore(frequencyStats: FrequencyStats): Int {
+        val frequencySpread = frequencyStats.spreadHz ?: return -10
+        return when {
+            frequencySpread <= 12 -> 25
+            frequencySpread <= 30 -> 14
+            frequencySpread <= 60 -> 2
+            else -> -12
+        }
+    }
+
+    private fun frequencyConsistencyConfidence(frequencyStats: FrequencyStats): Int {
+        val frequencySpread = frequencyStats.spreadHz ?: return -12
+        return when {
+            frequencySpread <= 12 -> 18
+            frequencySpread <= 30 -> 8
+            frequencySpread <= 60 -> -2
+            else -> -18
+        }
+    }
+
+    private fun List<KnockCapture>.readinessEvidence(frequencyStats: FrequencyStats): String =
+        when {
+            size < REQUIRED_KNOCK_COUNT -> "Need 3 valid knocks before audio can carry result confidence."
+            frequencyStats.measuredCount < REQUIRED_KNOCK_COUNT ->
+                "Need 3 measured knock frequencies before audio can carry full confidence."
+            else -> "Audio heuristic uses measured peak, RMS, and frequency consistency."
+        }
+
+    private fun FrequencyStats.spreadLabel(): String = spreadHz?.let { "$it Hz" } ?: "unavailable"
+
+    private data class FrequencyStats(
+        val measuredCount: Int,
+        val averageFrequencyHz: Int,
+        val spreadHz: Int?,
+    )
 }

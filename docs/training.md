@@ -152,6 +152,15 @@ python3 -m tools.training.picked_history_feedback \
   --output-manifest datasets/interim/picked-history-feedback-v0/manifest.jsonl
 ```
 
+To also stage labeled knock audio from the same picked-history bundle:
+
+```sh
+python3 -m tools.training.picked_history_feedback \
+  --export-manifest /path/to/training-exports/dataset-<timestamp>/manifest.jsonl \
+  --output-manifest datasets/interim/picked-history-feedback-v0/manifest.jsonl \
+  --audio-output-manifest datasets/interim/picked-history-audio-v0/manifest.jsonl
+```
+
 Then include the converted feedback in a sweetness run:
 
 ```sh
@@ -180,6 +189,12 @@ the binary sweetness track as:
 Bland, Mild -> not_sweet
 Good, Sweet, VerySweet -> sweet
 ```
+
+When `--audio-output-manifest` is provided, the converter also emits
+audio-backed picked-history records. Those records keep the audio artifact path,
+sweetness label, texture rating, app audio score, valid knock count, estimated
+frequency, and source artifact metadata. That manifest is for audio research and
+future model training; it is not consumed by `visual_baseline`.
 
 Each run writes:
 

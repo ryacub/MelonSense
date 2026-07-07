@@ -1,6 +1,8 @@
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from tools.training import picked_history_feedback
@@ -66,6 +68,75 @@ class PickedHistoryFeedbackTest(unittest.TestCase):
             self.assertEqual(1_100, records[0]["artifact_last_modified_at_millis"])
             self.assertEqual(640, records[0]["artifact_width"])
             self.assertEqual(480, records[0]["artifact_height"])
+
+    def test_convert_export_writes_audio_feedback_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            manifest = root / "manifest.jsonl"
+            audio = root / "media" / "42-audio.pcm16.gz"
+            audio.parent.mkdir()
+            audio.write_bytes(b"audio")
+            write_jsonl(
+                manifest,
+                [
+                    export_record(
+                        pick_id=42,
+                        sweetness="VerySweet",
+                        texture="Crisp",
+                        artifacts=[artifact("Audio", audio)],
+                    ),
+                ],
+            )
+
+            summary = picked_history_feedback.convert_audio_feedback_export(
+                export_manifest=manifest,
+                output_manifest=root / "audio-feedback" / "manifest.jsonl",
+            )
+
+            records = read_jsonl(root / "audio-feedback" / "manifest.jsonl")
+            self.assertEqual({"record_count": 1, "class_balance": {"sweet": 1}}, summary)
+            self.assertEqual(audio.as_posix(), records[0]["audio_path"])
+            self.assertEqual("sweet", records[0]["normalized_label"])
+            self.assertEqual(["sweet"], records[0]["normalized_labels"])
+            self.assertEqual("Crisp", records[0]["feedback_texture"])
+            self.assertEqual(82, records[0]["audio_score"])
+            self.assertEqual(91, records[0]["audio_confidence_percent"])
+            self.assertEqual(3, records[0]["valid_knocks"])
+            self.assertEqual(144, records[0]["estimated_frequency_hz"])
+            self.assertEqual("audio/pcm16+gzip", records[0]["artifact_mime_type"])
+
+    def test_cli_writes_audio_manifest_when_photo_manifest_has_no_usable_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            manifest = root / "manifest.jsonl"
+            audio = root / "media" / "42-audio.pcm16.gz"
+            audio.parent.mkdir()
+            audio.write_bytes(b"audio")
+            write_jsonl(
+                manifest,
+                [
+                    export_record(
+                        pick_id=42,
+                        sweetness="VerySweet",
+                        texture="Crisp",
+                        artifacts=[artifact("Audio", audio)],
+                    ),
+                ],
+            )
+
+            with redirect_stdout(io.StringIO()):
+                exit_code = picked_history_feedback.main(
+                    [
+                        "--export-manifest",
+                        manifest.as_posix(),
+                        "--audio-output-manifest",
+                        (root / "audio-feedback" / "manifest.jsonl").as_posix(),
+                    ],
+                )
+
+            records = read_jsonl(root / "audio-feedback" / "manifest.jsonl")
+            self.assertEqual(0, exit_code)
+            self.assertEqual(audio.as_posix(), records[0]["audio_path"])
 
     def test_convert_export_resolves_pulled_bundle_media_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

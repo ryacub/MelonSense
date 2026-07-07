@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-12. Audio model hardening with labeled knock samples
+13. Overripe class data strategy
 
 ## Loop 1 Completed
 
@@ -28,20 +28,20 @@
 9. Device QA + first real feedback export dry run
 10. First real data loop
 11. Model quality evaluation and threshold tuning
+12. Audio model hardening with labeled knock samples
 
 ## Loop 2 Queue
 
-12. Audio model hardening with labeled knock samples
 13. Overripe class data strategy
 14. Android packaging size pass
 15. Training and QA runbook polish
 
 ## Acceptance For Current Goal
 
-- Collect or import labeled knock samples with known outcome context.
-- Replace placeholder resonance wording with measured audio features that can be evaluated.
-- Decide what can be hardened with current data versus deferred until real fruit samples exist.
-- Keep the app usable if labeled audio data is still insufficient.
+- Identify usable public and app-collected overripe sources.
+- Decide whether overripe can be included in the packaged visual model now.
+- Preserve the current binary runtime behavior if overripe data is not strong enough.
+- Document the minimum data gate for adding overripe back to runtime scoring.
 
 ## Loop 2 Purpose
 
@@ -85,6 +85,11 @@ weakest signal areas.
 - Latest local ripeness metrics are also weak enough that visual-only confidence should stay conservative: test accuracy `0.16666666666666666`, macro F1 `0.1507936507936508`.
 - Result-label thresholds stay unchanged at `85/70/55`, but local visual scoring now baseline-normalized confidence-adjusts each track score toward neutral before combining tracks.
 - Do not package the emulator-feedback `training-runs/visual-baseline/sweetness/model_mobile.ptl` candidate.
+- Goal 12 completed. See `docs/audio-model-hardening.md`.
+- Knock scoring now uses measured valid count, average peak, average RMS, estimated knock frequency, and frequency spread instead of placeholder resonance wording.
+- Audio score/confidence stay conservative when fewer than three valid knocks exist or when valid knocks have inconsistent estimated frequencies.
+- Picked-history export conversion can now write `datasets/interim/picked-history-audio-v0/manifest.jsonl` via `--audio-output-manifest`.
+- Do not package a trained audio model yet. Current usable audio data is emulator-generated and only proves plumbing, not model quality.
 
 ## Known Tradeoffs
 
