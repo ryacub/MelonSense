@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-10. First real data loop
+11. Model quality evaluation and threshold tuning
 
 ## Loop 1 Completed
 
@@ -23,10 +23,13 @@
 7. Retraining pipeline using picked-history data
 8. Model replacement/versioning in app
 
-## Loop 2 Queue
+## Loop 2 Completed
 
 9. Device QA + first real feedback export dry run
 10. First real data loop
+
+## Loop 2 Queue
+
 11. Model quality evaluation and threshold tuning
 12. Audio model hardening with labeled knock samples
 13. Overripe class data strategy
@@ -35,12 +38,10 @@
 
 ## Acceptance For Current Goal
 
-- Start from at least one real app-generated `training-exports/<bundle>/manifest.jsonl` bundle containing user-rated picked-history feedback.
-- Convert the real bundle with `python3 -m tools.training.picked_history_feedback`.
-- Confirm the converted visual feedback manifest contains usable photo-backed sweetness records.
-- Run visual baseline training with the converted manifest via `--extra-manifest`.
-- Record the resulting metrics and Android candidate artifact path.
-- If no real export bundle is available, stop with the missing-data blocker and keep Goal 9's physical-device/microphone blocker linked.
+- Review the latest visual/audio metrics and failure examples.
+- Decide whether current scoring thresholds are acceptable for MVP demo use.
+- Identify which threshold changes are justified by evidence versus deferred until real grocery-store data exists.
+- Record any model replacement candidate and why it should or should not be packaged.
 
 ## Loop 2 Purpose
 
@@ -63,13 +64,22 @@ weakest signal areas.
 - Audio permission was granted, and `Capture Knock` executed without crash, but the emulator captured silence/near-silence: `Knock was too quiet: peak 8`.
 - Relaunching the AVD with audio enabled and playing a short host-side synthetic knock WAV during capture still produced `peak 8`.
 - Deferred blocker: the headless emulator cannot provide a usable microphone/knock signal, so combined result, "I Picked This", history rating, export bundle pull, and converter dry run remain blocked until a physical Android device or a working emulator audio-input path is available.
+- Follow-up resolved the emulator audio-input path by using `-allow-host-audio`, `adb emu avd hostmicon`, max host input/output volume, and loud host WAV playback.
 
 ## Current Goal Run Notes
 
-- Targeted local search found no existing pulled app export bundle under the repo, `/tmp`, `~/Downloads`, or `~/Desktop`.
-- `adb devices -l` showed no connected Android device.
-- Current blocker: Goal 10 requires a real app-generated picked-history export bundle. That bundle depends on finishing the physical-device flow blocked in Goal 9, or manually providing an export copied from a device where camera and microphone capture work.
-- Added `python3 -m tools.training.real_data_loop` as the repeatable execution path for the first real-data loop once the missing export bundle exists. It validates the real export manifest, converts picked-history feedback, trains sweetness with the generated feedback manifest, and prints the Android candidate artifact path.
+- Goal 10 completed with an emulator-generated app export, not representative grocery-store data. See `docs/emulator-media-qa.md`.
+- Proper emulator config required `-allow-host-audio`, explicit `adb emu avd hostmicon`, max host input/output volume, and loud synthetic WAV playback during the 520 ms knock capture window.
+- Observed valid knock captures: peaks `32767`, estimated frequencies `275 Hz`, `265 Hz`, and `219 Hz`.
+- Combined app result reached `Recommendation: Strong Pick`, `Visual score: 90`, and `Audio score: 100`.
+- Export succeeded at `/data/user/0/com.ryacub.melonsense/files/training-exports/dataset-1783400945486/manifest.jsonl`.
+- Pulled bundle included manifest, one photo artifact, and one audio artifact.
+- `python3 -m tools.training.real_data_loop --export-manifest /tmp/melonsense-export-pull/dataset-1783400945486/manifest.jsonl --epochs 1 --max-samples-per-class 50` succeeded from the main worktree.
+- Converted feedback summary: `record_count=1`, `class_balance={"sweet": 1}`.
+- Training summary: `sample_counts.all=100`, `test_metrics.accuracy=0.4666666666666667`, Android candidate `training-runs/visual-baseline/sweetness/model_mobile.ptl`, candidate format `torchscript_lite`.
+- Emulator gRPC `injectAudio` is not usable on local emulator `36.4.9.0`: stream reset killed the emulator twice.
+- Mobile/Android MCP tooling is useful for device discovery and UI automation, but available MCP tools do not provide camera-scene or mic-frame injection.
+- New QA issue found: History outcome save persisted the row as `Rated` but the edit screen did not visibly leave edit mode until app restart.
 
 ## Known Tradeoffs
 
