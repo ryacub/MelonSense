@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-15. Training and QA runbook polish
+Loop 2 complete. Define Loop 3 before continuing.
 
 ## Loop 1 Completed
 
@@ -31,17 +31,17 @@
 12. Audio model hardening with labeled knock samples
 13. Overripe class data strategy
 14. Android packaging size pass
+15. Training and QA runbook polish
 
 ## Loop 2 Queue
 
-15. Training and QA runbook polish
+No queued goals. Recommended Loop 3 candidates are listed in
+`docs/mvp-runbook.md`.
 
 ## Acceptance For Current Goal
 
-- Consolidate training, data procurement, emulator QA, and packaging docs into a final MVP runbook.
-- Make the next physical-device/data-collection steps obvious.
-- Preserve links to detailed goal docs without duplicating stale commands.
-- Document remaining blockers and explicit next-loop candidates.
+Loop 2 is complete. The next goal should be selected from the Loop 3 candidates
+in `docs/mvp-runbook.md`.
 
 ## Loop 2 Purpose
 
@@ -100,6 +100,10 @@ weakest signal areas.
 - Model assets are small by comparison: packaged visual models total about `1.1 MB`.
 - ABI split APKs are enabled while keeping the universal APK fallback. Measured split APKs: arm64 `82,245,023` bytes / `78 MB`, armeabi-v7a `69,054,523` bytes / `66 MB`, x86 `89,092,379` bytes / `85 MB`, x86_64 `86,275,565` bytes / `82 MB`.
 - Keep PyTorch Lite for MVP. Revisit TFLite/runtime migration only if arm64 exceeds `120 MB`, app-bundle distribution becomes a goal, or PyTorch blocks target-device install.
+- Goal 15 completed. See `docs/mvp-runbook.md`.
+- The MVP operating path is now centralized around the physical-device picker loop: scan, knock, choose, rate sweetness/texture later, export, retrain, and package only after quality gates pass.
+- Detailed commands remain in the specialized docs: dataset procurement in `datasets/README.md` and `docs/datasets.md`, training in `docs/training.md`, emulator QA in `docs/emulator-media-qa.md`, packaging in `docs/android-packaging-size.md`, model quality in `docs/model-quality-evaluation.md`, audio in `docs/audio-model-hardening.md`, and overripe strategy in `docs/overripe-class-strategy.md`.
+- Loop 3 should start with physical-device smoke plus the first representative picked-history export, then fix the History edit-state UX issue and build enough real data to justify retraining decisions.
 
 ## Known Tradeoffs
 
