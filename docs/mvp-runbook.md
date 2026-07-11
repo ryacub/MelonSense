@@ -149,9 +149,9 @@ Use this when moving from emulator QA to real data collection:
 - Universal APK remains large because PyTorch Lite packages all ABIs; ABI split
   APKs are the sideload path for now.
 
-## Loop 3 Candidates
+## Loop 3 Plan
 
-Recommended next loop:
+Loop 3 is the physical-device and representative-data loop:
 
 1. Physical-device smoke and first real picked-history export.
 2. History edit-state UX fix.
@@ -162,3 +162,6 @@ Recommended next loop:
 7. Packaged model replacement only if quality gates pass.
 8. Release-readiness pass: signing, app icon/name polish, privacy/retention
    copy, and install instructions.
+
+Start with the physical-device smoke. Do not spend more time tuning models until
+the first real export is pulled and converted locally.

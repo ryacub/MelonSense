@@ -10,7 +10,7 @@
 
 ## Current Goal
 
-Loop 2 complete. Define Loop 3 before continuing.
+16. Physical-device smoke and first representative export
 
 ## Loop 1 Completed
 
@@ -33,15 +33,32 @@ Loop 2 complete. Define Loop 3 before continuing.
 14. Android packaging size pass
 15. Training and QA runbook polish
 
-## Loop 2 Queue
+## Loop 3 Queue
 
-No queued goals. Recommended Loop 3 candidates are listed in
-`docs/mvp-runbook.md`.
+16. Physical-device smoke and first representative export
+17. History edit-state UX fix
+18. Real picker data collection target
+19. Physical-phone holdout manifest setup
+20. Sweetness retraining with holdout metrics
+21. Knock audio dataset growth and feature audit
+22. Packaged model replacement gate
+23. Release readiness pass
+24. Loop 3 retrospective and Loop 4 decision
 
 ## Acceptance For Current Goal
 
-Loop 2 is complete. The next goal should be selected from the Loop 3 candidates
-in `docs/mvp-runbook.md`.
+- Install the ABI split APK on a physical Android device, preferably arm64.
+- Complete camera permission, photo capture, local visual inference, knock-test audio, combined result, `I Picked This`, History rating, export, pull, and real-data-loop conversion on one real melon.
+- Record exact device model, Android version, APK path, export path, and any blocked step.
+- Do not package a retrained model from the first export; this goal proves the physical feedback loop only.
+- Update `docs/mvp-runbook.md` and this file with physical-device evidence and next blocker status.
+
+## Loop 3 Purpose
+
+Loop 3 turns the MVP from an emulator-proven prototype into a real picker loop.
+The priority is representative physical-phone data, honest model gates, and
+release hygiene. A model replacement is allowed only after phone-captured
+training and holdout evidence justify it.
 
 ## Loop 2 Purpose
 
@@ -66,7 +83,7 @@ weakest signal areas.
 - Deferred blocker: the headless emulator cannot provide a usable microphone/knock signal, so combined result, "I Picked This", history rating, export bundle pull, and converter dry run remain blocked until a physical Android device or a working emulator audio-input path is available.
 - Follow-up resolved the emulator audio-input path by using `-allow-host-audio`, `adb emu avd hostmicon`, max host input/output volume, and loud host WAV playback.
 
-## Current Goal Run Notes
+## Loop 2 Run Notes
 
 - Goal 10 completed with an emulator-generated app export, not representative grocery-store data. See `docs/emulator-media-qa.md`.
 - Proper emulator config required `-allow-host-audio`, explicit `adb emu avd hostmicon`, max host input/output volume, and loud synthetic WAV playback during the 520 ms knock capture window.
@@ -104,6 +121,63 @@ weakest signal areas.
 - The MVP operating path is now centralized around the physical-device picker loop: scan, knock, choose, rate sweetness/texture later, export, retrain, and package only after quality gates pass.
 - Detailed commands remain in the specialized docs: dataset procurement in `datasets/README.md` and `docs/datasets.md`, training in `docs/training.md`, emulator QA in `docs/emulator-media-qa.md`, packaging in `docs/android-packaging-size.md`, model quality in `docs/model-quality-evaluation.md`, audio in `docs/audio-model-hardening.md`, and overripe strategy in `docs/overripe-class-strategy.md`.
 - Loop 3 should start with physical-device smoke plus the first representative picked-history export, then fix the History edit-state UX issue and build enough real data to justify retraining decisions.
+
+## Loop 3 Plan
+
+### 16. Physical-device smoke and first representative export
+
+- Install the stable ABI split APK on a physical Android device.
+- Run one complete real-melon loop: visual scan, knock test, result, `I Picked This`, later sweetness/texture rating, training export, local pull, and converter dry run.
+- Capture device/APK/export evidence and update the runbook.
+- Treat failure to access a physical Android device as a real blocker.
+
+### 17. History edit-state UX fix
+
+- Fix the known issue where a saved History outcome can persist but remain visually in edit mode until restart.
+- Cover the state transition with focused unit tests where possible.
+- Run Android behavior verification and independent review before merge.
+
+### 18. Real picker data collection target
+
+- Define and run a low-friction collection cadence for at least 10 chosen melons.
+- Keep required feedback limited to sweetness and texture.
+- Confirm training media retention and export hygiene remain understandable.
+- Track class balance instead of assuming all picked melons are useful positives.
+
+### 19. Physical-phone holdout manifest setup
+
+- Create a local manifest path for phone-captured holdout examples excluded from training.
+- Document how to separate training feedback from holdout captures.
+- Add validation that training commands can consume the holdout manifest without leaking it into training.
+
+### 20. Sweetness retraining with holdout metrics
+
+- Retrain sweetness only after enough real rated picks exist.
+- Report validation and holdout metrics, per-class behavior, and confusion matrix.
+- Keep the packaged model unchanged unless the holdout shows a real improvement.
+
+### 21. Knock audio dataset growth and feature audit
+
+- Build the picked-history audio manifest from real phone exports.
+- Audit valid knock count, peak/RMS, frequency, spread, sweetness label, and texture label distribution.
+- Decide whether heuristic tuning is justified before attempting a trained audio model.
+
+### 22. Packaged model replacement gate
+
+- Compare candidate model metrics against the packaged model and physical holdout.
+- Package a new model only if the gate in `docs/mvp-runbook.md` passes.
+- If the gate fails, document why and keep collecting data.
+
+### 23. Release readiness pass
+
+- Review app name/icon, debug/release install path, signing path, privacy/retention copy, and tester instructions.
+- Keep app distribution scoped to personal/non-commercial use unless the product direction changes.
+- Confirm ABI split size remains acceptable.
+
+### 24. Loop 3 retrospective and Loop 4 decision
+
+- Summarize physical-device evidence, data volume, model-quality status, and remaining blockers.
+- Decide whether Loop 4 should focus on more data, model architecture, audio modeling, UX polish, or release packaging.
 
 ## Known Tradeoffs
 
