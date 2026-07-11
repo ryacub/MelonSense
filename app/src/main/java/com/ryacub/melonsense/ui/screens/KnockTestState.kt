@@ -1,6 +1,7 @@
 package com.ryacub.melonsense.ui.screens
 
 import com.ryacub.melonsense.domain.audio.KnockAudioAnalyzer
+import com.ryacub.melonsense.domain.model.KnockCapture
 
 enum class KnockTestPhase {
     Ready,
@@ -64,3 +65,37 @@ fun KnockTestState.reduce(event: KnockTestEvent): KnockTestState =
                 this
             }
     }
+
+data class CapturedKnockWindow(
+    val capture: KnockCapture,
+    val samples: ShortArray,
+    val capturedAtMillis: Long,
+)
+
+data class KnockTestWorkflow(
+    val state: KnockTestState = KnockTestState(),
+    val lastCapture: KnockCapture? = null,
+    val validWindows: List<CapturedKnockWindow> = emptyList(),
+) {
+    val validKnocks: List<KnockCapture>
+        get() = validWindows.map { it.capture }
+
+    fun reduce(event: KnockTestEvent): KnockTestWorkflow = copy(state = state.reduce(event))
+
+    fun captureFinished(window: CapturedKnockWindow): KnockTestWorkflow {
+        if (state.phase != KnockTestPhase.Recording) return this
+        val acceptedWindows =
+            if (window.capture.isValid && validWindows.size < KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
+                validWindows + window
+            } else {
+                validWindows
+            }
+        return copy(
+            state = state.reduce(KnockTestEvent.CaptureFinished),
+            lastCapture = window.capture,
+            validWindows = acceptedWindows,
+        )
+    }
+
+    fun restored(): KnockTestWorkflow = copy(state = KnockTestState())
+}

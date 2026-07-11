@@ -31,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,6 +62,9 @@ import kotlinx.coroutines.withContext
 fun KnockTestScreen(
     inferenceEngine: MelonInferenceEngine,
     visualScanResult: VisualScanResult?,
+    workflow: KnockTestWorkflow,
+    onWorkflowEvent: (KnockTestEvent) -> Unit,
+    onKnockCaptured: (CapturedKnockWindow) -> Unit,
     onAnalyzeResult: (MelonAssessmentResult) -> Unit,
 ) {
     val context = LocalContext.current
@@ -76,10 +78,6 @@ fun KnockTestScreen(
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
-    var knockTestState by remember { mutableStateOf(KnockTestState()) }
-    var lastCapture by remember { mutableStateOf<KnockCapture?>(null) }
-    val validKnockWindows = remember { mutableStateListOf<CapturedKnockWindow>() }
-    val validKnocks = validKnockWindows.map { window -> window.capture }
     val permissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             hasAudioPermission = granted
@@ -102,47 +100,43 @@ fun KnockTestScreen(
 
     KnockTestContent(
         visualScanResult = visualScanResult,
-        validKnocks = validKnocks,
-        lastCapture = lastCapture,
-        knockTestState = knockTestState,
+        validKnocks = workflow.validKnocks,
+        lastCapture = workflow.lastCapture,
+        knockTestState = workflow.state,
         onCaptureKnock = {
-            if (!knockTestState.canCapture(validKnockWindows.size)) {
+            if (!workflow.state.canCapture(workflow.validWindows.size)) {
                 return@KnockTestContent
             }
-            knockTestState = knockTestState.reduce(KnockTestEvent.CaptureRequested)
+            onWorkflowEvent(KnockTestEvent.CaptureRequested)
             scope.launch {
                 try {
                     val window = captureKnockWindow()
-                    lastCapture = window.capture
-                    if (window.capture.isValid && validKnockWindows.size < KnockAudioAnalyzer.REQUIRED_KNOCK_COUNT) {
-                        validKnockWindows += window
-                    }
-                    knockTestState = knockTestState.reduce(KnockTestEvent.CaptureFinished)
+                    onKnockCaptured(window)
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
-                    knockTestState = knockTestState.reduce(KnockTestEvent.CaptureFailed)
+                    onWorkflowEvent(KnockTestEvent.CaptureFailed)
                 }
             }
         },
         onAnalyzeResult = {
-            if (!knockTestState.canAnalyze(validKnockWindows.size)) {
+            if (!workflow.state.canAnalyze(workflow.validWindows.size)) {
                 return@KnockTestContent
             }
-            knockTestState = knockTestState.reduce(KnockTestEvent.AnalyzeRequested)
+            onWorkflowEvent(KnockTestEvent.AnalyzeRequested)
             scope.launch {
                 try {
                     val capturedAtMillis = System.currentTimeMillis()
                     val audioArtifact =
                         mediaStore.saveCompressedAudioArtifact(
-                            samples = validKnockWindows.concatSamples(),
+                            samples = workflow.validWindows.concatSamples(),
                             sampleRateHz = KnockAudioAnalyzer.SAMPLE_RATE_HZ,
                             capturedAtMillis = capturedAtMillis,
                         )
                     val audioScanResult =
                         inferenceEngine.scoreAudio(
                             AudioInferenceInput(
-                                validKnocks = validKnocks,
+                                validKnocks = workflow.validKnocks,
                                 audioArtifact = audioArtifact,
                             ),
                         )
@@ -153,20 +147,20 @@ fun KnockTestScreen(
                             createdAtMillis = capturedAtMillis,
                             expiresAtMillis = capturedAtMillis + TRAINING_MEDIA_RETENTION_MILLIS,
                         )
-                    onAnalyzeResult(
+                    val assessmentResult =
                         inferenceEngine.assess(
                             AssessmentInferenceInput(
                                 visualScanResult = visualScanResult,
                                 audioScanResult = audioScanResult,
                                 trainingMedia = trainingMedia,
                             ),
-                        ),
-                    )
-                    knockTestState = knockTestState.reduce(KnockTestEvent.AnalyzeFinished)
+                        )
+                    onWorkflowEvent(KnockTestEvent.AnalyzeFinished)
+                    onAnalyzeResult(assessmentResult)
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
-                    knockTestState = knockTestState.reduce(KnockTestEvent.AnalyzeFailed)
+                    onWorkflowEvent(KnockTestEvent.AnalyzeFailed)
                 }
             }
         },
@@ -437,12 +431,6 @@ private suspend fun captureKnockWindow(): CapturedKnockWindow =
             capturedAtMillis = System.currentTimeMillis(),
         )
     }
-
-private data class CapturedKnockWindow(
-    val capture: KnockCapture,
-    val samples: ShortArray,
-    val capturedAtMillis: Long,
-)
 
 private fun List<CapturedKnockWindow>.concatSamples(): ShortArray {
     val totalSize = sumOf { window -> window.samples.size }

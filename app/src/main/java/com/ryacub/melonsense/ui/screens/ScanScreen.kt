@@ -64,9 +64,9 @@ import kotlin.coroutines.resumeWithException
 @Composable
 fun ScanScreen(
     inferenceEngine: MelonInferenceEngine,
-    visualScanResult: VisualScanResult?,
-    onVisualScanResultChange: (VisualScanResult?) -> Unit,
-    onStartKnockTest: (VisualScanResult) -> Unit,
+    assessmentWorkflow: ScanAssessmentWorkflow,
+    onAssessmentEvent: (ScanAssessmentEvent, VisualScanResult?) -> Unit,
+    onStartKnockTest: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -86,27 +86,6 @@ fun ScanScreen(
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
-    var scanAssessmentWorkflow by remember {
-        mutableStateOf(
-            ScanAssessmentWorkflow(
-                state =
-                    if (visualScanResult != null) {
-                        ScanAssessmentState(ScanAssessmentPhase.Complete)
-                    } else {
-                        ScanAssessmentState()
-                    },
-                visualScanResult = visualScanResult,
-            ),
-        )
-    }
-
-    fun applyAssessmentEvent(
-        event: ScanAssessmentEvent,
-        result: VisualScanResult? = null,
-    ) {
-        scanAssessmentWorkflow = scanAssessmentWorkflow.reduce(event, result)
-        onVisualScanResultChange(scanAssessmentWorkflow.visualScanResult)
-    }
     val permissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             hasCameraPermission = granted
@@ -121,13 +100,13 @@ fun ScanScreen(
     if (hasCameraPermission) {
         ScanContent(
             cameraController = cameraController,
-            scanAssessmentState = scanAssessmentWorkflow.state,
-            visualScanResult = scanAssessmentWorkflow.visualScanResult,
+            scanAssessmentState = assessmentWorkflow.state,
+            visualScanResult = assessmentWorkflow.visualScanResult,
             onCaptureFrame = {
-                if (!scanAssessmentWorkflow.state.canCapture) {
+                if (!assessmentWorkflow.state.canCapture) {
                     return@ScanContent
                 }
-                applyAssessmentEvent(ScanAssessmentEvent.CaptureRequested)
+                onAssessmentEvent(ScanAssessmentEvent.CaptureRequested, null)
                 scope.launch {
                     val photoArtifact =
                         try {
@@ -139,10 +118,10 @@ fun ScanScreen(
                         } catch (exception: CancellationException) {
                             throw exception
                         } catch (exception: Exception) {
-                            applyAssessmentEvent(ScanAssessmentEvent.CaptureFailed)
+                            onAssessmentEvent(ScanAssessmentEvent.CaptureFailed, null)
                             return@launch
                         }
-                    applyAssessmentEvent(ScanAssessmentEvent.CaptureSucceeded)
+                    onAssessmentEvent(ScanAssessmentEvent.CaptureSucceeded, null)
                     try {
                         val result =
                             inferenceEngine.scoreVisual(
@@ -150,17 +129,15 @@ fun ScanScreen(
                                     photoArtifact = photoArtifact,
                                 ),
                             )
-                        applyAssessmentEvent(ScanAssessmentEvent.AnalysisSucceeded, result)
+                        onAssessmentEvent(ScanAssessmentEvent.AnalysisSucceeded, result)
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {
-                        applyAssessmentEvent(ScanAssessmentEvent.AnalysisFailed)
+                        onAssessmentEvent(ScanAssessmentEvent.AnalysisFailed, null)
                     }
                 }
             },
-            onStartKnockTest = {
-                scanAssessmentWorkflow.visualScanResult?.let(onStartKnockTest)
-            },
+            onStartKnockTest = onStartKnockTest,
         )
     } else {
         CameraPermissionContent(

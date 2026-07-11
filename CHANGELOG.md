@@ -20,6 +20,7 @@ All notable project changes should be recorded here.
 
 ### Changed
 
+- Assessment progress now survives recreation, and starting a new scan invalidates stale knock and result state.
 - Visual scoring now dampens low-confidence local model predictions toward
   neutral instead of over-trusting weak classifications.
 - Knock-test scoring now uses measured valid knock count, peak/RMS amplitude,

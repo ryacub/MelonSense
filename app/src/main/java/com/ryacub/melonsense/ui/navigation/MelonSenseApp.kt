@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -37,16 +38,13 @@ import com.ryacub.melonsense.domain.inference.LocalVisualMelonInferenceEngine
 import com.ryacub.melonsense.domain.inference.LocalVisualModelCatalog
 import com.ryacub.melonsense.domain.inference.LocalVisualModelScorer
 import com.ryacub.melonsense.domain.inference.PytorchVisualModelRunner
-import com.ryacub.melonsense.domain.model.MelonAssessmentResult
-import com.ryacub.melonsense.domain.model.VisualScanResult
 import com.ryacub.melonsense.ui.screens.HistoryScreen
 import com.ryacub.melonsense.ui.screens.KnockTestScreen
 import com.ryacub.melonsense.ui.screens.PickedAssessmentSaveEvent
-import com.ryacub.melonsense.ui.screens.PickedAssessmentSaveState
 import com.ryacub.melonsense.ui.screens.ResultScreen
 import com.ryacub.melonsense.ui.screens.ScanScreen
 import com.ryacub.melonsense.ui.screens.SettingsScreen
-import com.ryacub.melonsense.ui.screens.reduce
+import com.ryacub.melonsense.ui.session.AssessmentSessionViewModel
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
@@ -57,6 +55,8 @@ fun MelonSenseApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
+    val assessmentSessionViewModel: AssessmentSessionViewModel = viewModel()
+    val assessmentSessionState by assessmentSessionViewModel.state.collectAsState()
     val database = remember(context) { MelonSenseDatabase.getInstance(context) }
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
     val inferenceEngine =
@@ -97,9 +97,6 @@ fun MelonSenseApp() {
             )
         }
     val historyItems by historyRepository.historyItems.collectAsState(initial = emptyList())
-    var visualScanResult by remember { mutableStateOf<VisualScanResult?>(null) }
-    var melonAssessmentResult by remember { mutableStateOf<MelonAssessmentResult?>(null) }
-    var pickedAssessmentSaveState by remember { mutableStateOf(PickedAssessmentSaveState()) }
     var trainingQueueItems by remember { mutableStateOf<List<TrainingQueueItem>>(emptyList()) }
     var lastDatasetExportPath by remember { mutableStateOf<String?>(null) }
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -127,7 +124,8 @@ fun MelonSenseApp() {
         bottomBar = {
             NavigationBar {
                 MelonSenseDestination.entries.forEach { destination ->
-                    val destinationEnabled = !destination.requiresVisualResult || visualScanResult != null
+                    val destinationEnabled =
+                        !destination.requiresVisualResult || assessmentSessionState.scanWorkflow.visualScanResult != null
                     NavigationBarItem(
                         selected = selectedDestination == destination,
                         enabled = destinationEnabled,
@@ -170,18 +168,15 @@ fun MelonSenseApp() {
             composable(MelonSenseDestination.Scan.route) {
                 ScanScreen(
                     inferenceEngine = inferenceEngine,
-                    visualScanResult = visualScanResult,
-                    onVisualScanResultChange = { result ->
-                        visualScanResult = result
-                    },
-                    onStartKnockTest = { result ->
-                        visualScanResult = result
+                    assessmentWorkflow = assessmentSessionState.scanWorkflow,
+                    onAssessmentEvent = assessmentSessionViewModel::onScanEvent,
+                    onStartKnockTest = {
                         navController.navigate(MelonSenseDestination.KnockTest.route)
                     },
                 )
             }
             composable(MelonSenseDestination.KnockTest.route) {
-                val currentVisualScanResult = visualScanResult
+                val currentVisualScanResult = assessmentSessionState.scanWorkflow.visualScanResult
                 if (currentVisualScanResult == null) {
                     LaunchedEffect(Unit) {
                         navController.navigate(MelonSenseDestination.Scan.route) {
@@ -195,9 +190,11 @@ fun MelonSenseApp() {
                     KnockTestScreen(
                         inferenceEngine = inferenceEngine,
                         visualScanResult = currentVisualScanResult,
+                        workflow = assessmentSessionState.knockWorkflow,
+                        onWorkflowEvent = assessmentSessionViewModel::onKnockEvent,
+                        onKnockCaptured = assessmentSessionViewModel::onKnockCaptured,
                         onAnalyzeResult = { result ->
-                            melonAssessmentResult = result
-                            pickedAssessmentSaveState = pickedAssessmentSaveState.reduce(PickedAssessmentSaveEvent.ResultChanged)
+                            assessmentSessionViewModel.onAssessmentResult(result)
                             navController.navigate(MelonSenseDestination.Result.route)
                         },
                     )
@@ -205,23 +202,23 @@ fun MelonSenseApp() {
             }
             composable(MelonSenseDestination.Result.route) {
                 ResultScreen(
-                    assessmentResult = melonAssessmentResult,
-                    pickedAssessmentSaveState = pickedAssessmentSaveState,
+                    assessmentResult = assessmentSessionState.assessmentResult,
+                    pickedAssessmentSaveState = assessmentSessionState.pickedAssessmentSaveState,
                     onPickedThis = {
-                        if (!pickedAssessmentSaveState.canSave) {
+                        if (!assessmentSessionState.pickedAssessmentSaveState.canSave) {
                             return@ResultScreen
                         }
-                        val assessmentResult = melonAssessmentResult ?: return@ResultScreen
-                        pickedAssessmentSaveState = pickedAssessmentSaveState.reduce(PickedAssessmentSaveEvent.SaveRequested)
+                        val assessmentResult = assessmentSessionState.assessmentResult ?: return@ResultScreen
+                        assessmentSessionViewModel.onSaveEvent(PickedAssessmentSaveEvent.SaveRequested)
                         coroutineScope.launch {
                             try {
                                 historyRepository.savePickedAssessment(assessmentResult)
-                                pickedAssessmentSaveState = pickedAssessmentSaveState.reduce(PickedAssessmentSaveEvent.SaveSucceeded)
+                                assessmentSessionViewModel.onSaveEvent(PickedAssessmentSaveEvent.SaveSucceeded)
                                 navController.navigate(MelonSenseDestination.History.route)
                             } catch (exception: CancellationException) {
                                 throw exception
                             } catch (exception: Exception) {
-                                pickedAssessmentSaveState = pickedAssessmentSaveState.reduce(PickedAssessmentSaveEvent.SaveFailed)
+                                assessmentSessionViewModel.onSaveEvent(PickedAssessmentSaveEvent.SaveFailed)
                             }
                         }
                     },
