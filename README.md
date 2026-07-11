@@ -12,8 +12,12 @@ MelonSense is a native Android app for judging watermelons with visual cues, kno
 - Sweetness and texture outcome ratings.
 - Local training exports and Python retraining tools.
 
-Start with [docs/mvp-runbook.md](docs/mvp-runbook.md) for the current operating
-path, data gates, and next-loop candidates.
+Useful project docs:
+
+- [docs/training.md](docs/training.md)
+- [docs/datasets.md](docs/datasets.md)
+- [docs/emulator-media-qa.md](docs/emulator-media-qa.md)
+- [docs/android-packaging-size.md](docs/android-packaging-size.md)
 
 ## Build
 
