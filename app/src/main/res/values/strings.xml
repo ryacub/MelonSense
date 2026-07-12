@@ -64,6 +64,7 @@
     <string name="history_result_label">Result Label</string>
     <string name="history_sweetness">Sweetness</string>
     <string name="history_texture">Texture</string>
+    <string name="history_rating_required">Required</string>
     <string name="history_save_outcome">Save Outcome</string>
     <string name="training_queue_title">Training Queue</string>
     <string name="training_queue_summary">Ready to export: %1$d / %2$d</string>

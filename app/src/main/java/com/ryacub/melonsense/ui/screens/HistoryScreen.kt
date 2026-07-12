@@ -235,9 +235,9 @@ private fun OutcomeEditor(
         texture: TextureRating,
     ) -> Unit,
 ) {
-    var resultLabel by remember(item.id) { mutableStateOf(item.resultLabel) }
-    var sweetness by remember(item.id) { mutableStateOf(item.sweetness ?: SweetnessRating.Good) }
-    var texture by remember(item.id) { mutableStateOf(item.texture ?: TextureRating.Okay) }
+    var editorState by remember(item.id, item.resultLabel, item.sweetness, item.texture) {
+        mutableStateOf(OutcomeEditorState.from(item))
+    }
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -253,29 +253,34 @@ private fun OutcomeEditor(
             SelectorGroup(
                 titleRes = R.string.history_result_label,
                 values = ResultLabel.entries,
-                selected = resultLabel,
+                selected = editorState.resultLabel,
                 labelFor = { label -> label.labelRes },
-                onSelected = { label -> resultLabel = label },
+                onSelected = { label -> editorState = editorState.selectResultLabel(label) },
             )
             SelectorGroup(
                 titleRes = R.string.history_sweetness,
                 values = SweetnessRating.entries,
-                selected = sweetness,
+                selected = editorState.sweetness,
                 labelFor = { rating -> rating.labelRes },
-                onSelected = { rating -> sweetness = rating },
+                onSelected = { rating -> editorState = editorState.selectSweetness(rating) },
+                showRequired = editorState.sweetness == null,
             )
             SelectorGroup(
                 titleRes = R.string.history_texture,
                 values = TextureRating.entries,
-                selected = texture,
+                selected = editorState.texture,
                 labelFor = { rating -> rating.labelRes },
-                onSelected = { rating -> texture = rating },
+                onSelected = { rating -> editorState = editorState.selectTexture(rating) },
+                showRequired = editorState.texture == null,
             )
 
             Button(
                 onClick = {
-                    onSaveOutcome(item.id, resultLabel, sweetness, texture)
+                    val sweetness = editorState.sweetness ?: return@Button
+                    val texture = editorState.texture ?: return@Button
+                    onSaveOutcome(item.id, editorState.resultLabel, sweetness, texture)
                 },
+                enabled = editorState.canSave,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.history_save_outcome))
@@ -289,9 +294,10 @@ private fun OutcomeEditor(
 private fun <T> SelectorGroup(
     @StringRes titleRes: Int,
     values: List<T>,
-    selected: T,
+    selected: T?,
     labelFor: (T) -> Int,
     onSelected: (T) -> Unit,
+    showRequired: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -299,6 +305,13 @@ private fun <T> SelectorGroup(
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
+        if (showRequired) {
+            Text(
+                text = stringResource(R.string.history_rating_required),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
