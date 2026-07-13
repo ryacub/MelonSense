@@ -22,6 +22,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSavedStateRegistryOwner
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -57,6 +58,8 @@ import com.ryacub.melonsense.ui.screens.SettingsScreen
 import com.ryacub.melonsense.ui.screens.TrainingExportEvent
 import com.ryacub.melonsense.ui.screens.TrainingExportIntentFactory
 import com.ryacub.melonsense.ui.screens.TrainingExportState
+import com.ryacub.melonsense.ui.screens.TrainingExportViewModel
+import com.ryacub.melonsense.ui.screens.TrainingExportViewModelFactory
 import com.ryacub.melonsense.ui.session.AssessmentSessionViewModel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -113,9 +116,12 @@ fun MelonSenseApp() {
         }
     val historyItems by historyRepository.historyItems.collectAsState(initial = emptyList())
     var trainingQueueItems by remember { mutableStateOf<List<TrainingQueueItem>>(emptyList()) }
-    var trainingExportState by remember { mutableStateOf(TrainingExportState()) }
     var trainingCaptureEnabled by remember { mutableStateOf(captureSettingsRepository.isEnabled) }
     var retentionCleanupState by remember { mutableStateOf(RetentionCleanupState()) }
+    val savedStateRegistryOwner = LocalSavedStateRegistryOwner.current
+    val trainingExportViewModel: TrainingExportViewModel =
+        viewModel(factory = TrainingExportViewModelFactory(savedStateRegistryOwner, trainingDatasetExportRepository))
+    val trainingExportState by trainingExportViewModel.state.collectAsState()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val selectedDestination =
@@ -134,7 +140,7 @@ fun MelonSenseApp() {
         }
     }
 
-    LaunchedEffect(historyItems, trainingDatasetExportRepository) {
+    LaunchedEffect(historyItems, trainingExportState.phase) {
         trainingQueueItems = trainingDatasetExportRepository.getQueue(System.currentTimeMillis())
     }
 
@@ -228,40 +234,16 @@ fun MelonSenseApp() {
                     trainingQueueItems = trainingQueueItems,
                     trainingExportState = trainingExportState,
                     onExportTrainingDataset = {
-                        if (!trainingExportState.canStart) return@HistoryScreen
-                        trainingExportState = trainingExportState.reduce(TrainingExportEvent.Requested)
-                        coroutineScope.launch {
-                            try {
-                                val nowMillis = System.currentTimeMillis()
-                                val bundle =
-                                    trainingDatasetExportRepository.exportEligible(
-                                        nowMillis = nowMillis,
-                                        createdAtMillis = nowMillis,
-                                    )
-                                trainingExportState =
-                                    trainingExportState.reduce(
-                                        TrainingExportEvent.Succeeded(
-                                            archivePath = bundle.archiveFile.absolutePath,
-                                            entryCount = bundle.entryCount,
-                                        ),
-                                    )
-                                trainingQueueItems = emptyList()
-                            } catch (exception: CancellationException) {
-                                trainingExportState = trainingExportState.reduce(TrainingExportEvent.Cancelled)
-                                throw exception
-                            } catch (exception: Exception) {
-                                trainingExportState = trainingExportState.reduce(TrainingExportEvent.Failed)
-                            }
-                        }
+                        trainingExportViewModel.onExportRequested(System.currentTimeMillis())
                     },
                     onShareTrainingDataset = {
                         val archivePath = trainingExportState.archivePath ?: return@HistoryScreen
-                        trainingExportState = trainingExportState.reduce(TrainingExportEvent.ShareStarted)
+                        trainingExportViewModel.onShareStarted()
                         try {
                             val shareSpec = TrainingExportIntentFactory.create(File(archivePath))
                             val shareIntent = TrainingExportIntentFactory.createIntent(context, shareSpec)
                             if (!TrainingExportIntentFactory.hasShareTarget(context, shareIntent)) {
-                                trainingExportState = trainingExportState.reduce(TrainingExportEvent.ShareFailed)
+                                trainingExportViewModel.onShareFailed()
                                 return@HistoryScreen
                             }
                             context.startActivity(
@@ -271,7 +253,7 @@ fun MelonSenseApp() {
                                 ),
                             )
                         } catch (exception: Exception) {
-                            trainingExportState = trainingExportState.reduce(TrainingExportEvent.ShareFailed)
+                            trainingExportViewModel.onShareFailed()
                         }
                     },
                     onSaveOutcome = { pickId, resultLabel, sweetness, texture ->
