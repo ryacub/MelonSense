@@ -22,6 +22,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.zip.ZipFile
 
 @RunWith(AndroidJUnit4::class)
 class RoomHistoryRepositoryInstrumentedTest {
@@ -191,8 +192,10 @@ class RoomHistoryRepositoryInstrumentedTest {
                 )
 
             assertEquals(1, bundle.entryCount)
-            assertEquals(true, bundle.manifestFile.exists())
             assertEquals(true, bundle.archiveFile.exists())
+            ZipFile(bundle.archiveFile).use { archive ->
+                assertNotNull(archive.getEntry("manifest.jsonl"))
+            }
             database.close()
 
             val reopenedDatabase = openDatabase()
