@@ -45,6 +45,7 @@ import androidx.core.content.ContextCompat
 import com.ryacub.melonsense.R
 import com.ryacub.melonsense.data.training.FileTrainingMediaStore
 import com.ryacub.melonsense.data.training.TRAINING_MEDIA_RETENTION_MILLIS
+import com.ryacub.melonsense.data.training.TrainingMediaRetentionController
 import com.ryacub.melonsense.domain.audio.KnockAudioAnalyzer
 import com.ryacub.melonsense.domain.inference.AssessmentInferenceInput
 import com.ryacub.melonsense.domain.inference.AudioInferenceInput
@@ -61,6 +62,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun KnockTestScreen(
     inferenceEngine: MelonInferenceEngine,
+    retentionController: TrainingMediaRetentionController,
+    retainTrainingMedia: Boolean,
     visualScanResult: VisualScanResult?,
     workflow: KnockTestWorkflow,
     onWorkflowEvent: (KnockTestEvent) -> Unit,
@@ -133,30 +136,37 @@ fun KnockTestScreen(
                             sampleRateHz = KnockAudioAnalyzer.SAMPLE_RATE_HZ,
                             capturedAtMillis = capturedAtMillis,
                         )
-                    val audioScanResult =
-                        inferenceEngine.scoreAudio(
-                            AudioInferenceInput(
-                                validKnocks = workflow.validKnocks,
-                                audioArtifact = audioArtifact,
-                            ),
-                        )
-                    val trainingMedia =
-                        PendingTrainingMedia(
-                            photoArtifact = visualScanResult?.photoArtifact,
-                            audioArtifact = audioArtifact,
-                            createdAtMillis = capturedAtMillis,
-                            expiresAtMillis = capturedAtMillis + TRAINING_MEDIA_RETENTION_MILLIS,
-                        )
-                    val assessmentResult =
-                        inferenceEngine.assess(
-                            AssessmentInferenceInput(
-                                visualScanResult = visualScanResult,
-                                audioScanResult = audioScanResult,
-                                trainingMedia = trainingMedia,
-                            ),
-                        )
+                    val retainedResult =
+                        retentionController.cleanupOnFailure(
+                            artifacts = listOfNotNull(visualScanResult?.photoArtifact, audioArtifact),
+                            retainTrainingMedia = retainTrainingMedia,
+                        ) {
+                            val audioScanResult =
+                                inferenceEngine.scoreAudio(
+                                    AudioInferenceInput(
+                                        validKnocks = workflow.validKnocks,
+                                        audioArtifact = audioArtifact,
+                                    ),
+                                )
+                            val trainingMedia =
+                                PendingTrainingMedia(
+                                    photoArtifact = visualScanResult?.photoArtifact,
+                                    audioArtifact = audioArtifact,
+                                    createdAtMillis = capturedAtMillis,
+                                    expiresAtMillis = capturedAtMillis + TRAINING_MEDIA_RETENTION_MILLIS,
+                                )
+                            val assessmentResult =
+                                inferenceEngine.assess(
+                                    AssessmentInferenceInput(
+                                        visualScanResult = visualScanResult,
+                                        audioScanResult = audioScanResult,
+                                        trainingMedia = trainingMedia,
+                                    ),
+                                )
+                            retentionController.applyToAssessment(assessmentResult, retainTrainingMedia)
+                        }
                     onWorkflowEvent(KnockTestEvent.AnalyzeFinished)
-                    onAnalyzeResult(assessmentResult)
+                    onAnalyzeResult(retainedResult)
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {

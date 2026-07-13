@@ -62,8 +62,13 @@ class FileTrainingMediaStore(
         withContext(Dispatchers.IO) {
             ensureMediaDirectory()
             val file = File(mediaDirectory, "audio-$capturedAtMillis-${UUID.randomUUID()}.pcm16.gz")
-            GZIPOutputStream(file.outputStream()).use { output ->
-                output.write(samples.toLittleEndianBytes())
+            try {
+                GZIPOutputStream(file.outputStream()).use { output ->
+                    output.write(samples.toLittleEndianBytes())
+                }
+            } catch (failure: Throwable) {
+                file.delete()
+                throw failure
             }
             TrainingMediaArtifact(
                 kind = TrainingMediaKind.Audio,

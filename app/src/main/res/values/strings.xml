@@ -101,6 +101,15 @@
     <string name="training_status_exported">Exported</string>
     <string name="training_status_expired">Expired</string>
     <string name="settings_headline">App settings</string>
-    <string name="settings_body">Training capture, retention, and model settings will appear here.</string>
+    <string name="settings_training_capture_title">Keep training media</string>
+    <string name="settings_training_capture_body">Keep new photos and knock audio for improving local models.</string>
+    <string name="settings_retention_policy">Retained training media is automatically deleted after 14 days.</string>
+    <string name="settings_cleanup_action">Delete Expired Media Now</string>
+    <string name="settings_cleanup_running">Deleting...</string>
+    <plurals name="settings_cleanup_succeeded">
+        <item quantity="one">Deleted %1$d expired media item.</item>
+        <item quantity="other">Deleted %1$d expired media items.</item>
+    </plurals>
+    <string name="settings_cleanup_failed">Cleanup failed. Try again.</string>
     <string name="placeholder_confidence">Confidence placeholder</string>
 </resources>

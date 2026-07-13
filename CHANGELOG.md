@@ -20,6 +20,7 @@ All notable project changes should be recorded here.
 
 ### Changed
 
+- Settings now controls default-on training-media retention and supports manual expired-media cleanup.
 - Unrated history outcomes now require explicit sweetness and texture selections before saving.
 - Assessment progress now survives recreation, and starting a new scan invalidates stale knock and result state.
 - Visual scoring now dampens low-confidence local model predictions toward

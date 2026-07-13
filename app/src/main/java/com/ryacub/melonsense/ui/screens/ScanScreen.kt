@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ryacub.melonsense.R
 import com.ryacub.melonsense.data.training.FileTrainingMediaStore
+import com.ryacub.melonsense.data.training.TrainingMediaRetentionController
 import com.ryacub.melonsense.domain.inference.MelonInferenceEngine
 import com.ryacub.melonsense.domain.inference.VisualInferenceInput
 import com.ryacub.melonsense.domain.model.TrainingMediaArtifact
@@ -64,6 +65,8 @@ import kotlin.coroutines.resumeWithException
 @Composable
 fun ScanScreen(
     inferenceEngine: MelonInferenceEngine,
+    retentionController: TrainingMediaRetentionController,
+    retainTrainingMedia: Boolean,
     assessmentWorkflow: ScanAssessmentWorkflow,
     onAssessmentEvent: (ScanAssessmentEvent, VisualScanResult?) -> Unit,
     onStartKnockTest: () -> Unit,
@@ -123,13 +126,20 @@ fun ScanScreen(
                         }
                     onAssessmentEvent(ScanAssessmentEvent.CaptureSucceeded, null)
                     try {
-                        val result =
-                            inferenceEngine.scoreVisual(
-                                VisualInferenceInput(
-                                    photoArtifact = photoArtifact,
-                                ),
-                            )
-                        onAssessmentEvent(ScanAssessmentEvent.AnalysisSucceeded, result)
+                        val retainedResult =
+                            retentionController.cleanupOnFailure(
+                                artifacts = listOf(photoArtifact),
+                                retainTrainingMedia = retainTrainingMedia,
+                            ) {
+                                val result =
+                                    inferenceEngine.scoreVisual(
+                                        VisualInferenceInput(
+                                            photoArtifact = photoArtifact,
+                                        ),
+                                    )
+                                retentionController.applyToVisualResult(result, retainTrainingMedia)
+                            }
+                        onAssessmentEvent(ScanAssessmentEvent.AnalysisSucceeded, retainedResult)
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {
@@ -330,20 +340,29 @@ private suspend fun capturePhotoArtifact(
     val capturedAtMillis = System.currentTimeMillis()
     val photoFile = mediaStore.createPhotoArtifactFile(capturedAtMillis)
     val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-    suspendCancellableCoroutine<Unit> { continuation ->
-        cameraController.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(context),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    continuation.resume(Unit)
-                }
+    var captured = false
+    try {
+        suspendCancellableCoroutine<Unit> { continuation ->
+            cameraController.takePicture(
+                outputOptions,
+                ContextCompat.getMainExecutor(context),
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                        if (continuation.isActive) {
+                            continuation.resume(Unit)
+                        } else {
+                            photoFile.delete()
+                        }
+                    }
 
-                override fun onError(exception: ImageCaptureException) {
-                    continuation.resumeWithException(exception)
-                }
-            },
-        )
+                    override fun onError(exception: ImageCaptureException) {
+                        if (continuation.isActive) continuation.resumeWithException(exception)
+                    }
+                },
+            )
+        }
+        return mediaStore.readPhotoArtifactMetadata(photoFile, capturedAtMillis).also { captured = true }
+    } finally {
+        if (!captured) photoFile.delete()
     }
-    return mediaStore.readPhotoArtifactMetadata(photoFile, capturedAtMillis)
 }

@@ -30,7 +30,9 @@ import androidx.room.withTransaction
 import com.ryacub.melonsense.data.history.RoomHistoryRepository
 import com.ryacub.melonsense.data.local.MelonSenseDatabase
 import com.ryacub.melonsense.data.training.FileTrainingMediaStore
+import com.ryacub.melonsense.data.training.TrainingCaptureSettingsRepository
 import com.ryacub.melonsense.data.training.TrainingDatasetExportRepository
+import com.ryacub.melonsense.data.training.TrainingMediaRetentionController
 import com.ryacub.melonsense.data.training.TrainingQueueItem
 import com.ryacub.melonsense.data.training.TrainingRetentionRepository
 import com.ryacub.melonsense.data.training.scheduleTrainingRetentionWork
@@ -42,6 +44,8 @@ import com.ryacub.melonsense.ui.screens.HistoryScreen
 import com.ryacub.melonsense.ui.screens.KnockTestScreen
 import com.ryacub.melonsense.ui.screens.PickedAssessmentSaveEvent
 import com.ryacub.melonsense.ui.screens.ResultScreen
+import com.ryacub.melonsense.ui.screens.RetentionCleanupEvent
+import com.ryacub.melonsense.ui.screens.RetentionCleanupState
 import com.ryacub.melonsense.ui.screens.ScanScreen
 import com.ryacub.melonsense.ui.screens.SettingsScreen
 import com.ryacub.melonsense.ui.session.AssessmentSessionViewModel
@@ -59,6 +63,8 @@ fun MelonSenseApp() {
     val assessmentSessionState by assessmentSessionViewModel.state.collectAsState()
     val database = remember(context) { MelonSenseDatabase.getInstance(context) }
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
+    val retentionController = remember(mediaStore) { TrainingMediaRetentionController(mediaStore) }
+    val captureSettingsRepository = remember(context) { TrainingCaptureSettingsRepository(context) }
     val inferenceEngine =
         remember(context) {
             val modelCatalog =
@@ -99,6 +105,8 @@ fun MelonSenseApp() {
     val historyItems by historyRepository.historyItems.collectAsState(initial = emptyList())
     var trainingQueueItems by remember { mutableStateOf<List<TrainingQueueItem>>(emptyList()) }
     var lastDatasetExportPath by remember { mutableStateOf<String?>(null) }
+    var trainingCaptureEnabled by remember { mutableStateOf(captureSettingsRepository.isEnabled) }
+    var retentionCleanupState by remember { mutableStateOf(RetentionCleanupState()) }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val selectedDestination =
@@ -108,7 +116,13 @@ fun MelonSenseApp() {
 
     LaunchedEffect(trainingRetentionRepository) {
         scheduleTrainingRetentionWork(context)
-        trainingRetentionRepository.purgeExpired(System.currentTimeMillis())
+        try {
+            trainingRetentionRepository.purgeExpired(System.currentTimeMillis())
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            retentionCleanupState = retentionCleanupState.reduce(RetentionCleanupEvent.Failed)
+        }
     }
 
     LaunchedEffect(historyItems, trainingDatasetExportRepository) {
@@ -168,6 +182,8 @@ fun MelonSenseApp() {
             composable(MelonSenseDestination.Scan.route) {
                 ScanScreen(
                     inferenceEngine = inferenceEngine,
+                    retentionController = retentionController,
+                    retainTrainingMedia = trainingCaptureEnabled,
                     assessmentWorkflow = assessmentSessionState.scanWorkflow,
                     onAssessmentEvent = assessmentSessionViewModel::onScanEvent,
                     onStartKnockTest = {
@@ -189,6 +205,8 @@ fun MelonSenseApp() {
                 } else {
                     KnockTestScreen(
                         inferenceEngine = inferenceEngine,
+                        retentionController = retentionController,
+                        retainTrainingMedia = trainingCaptureEnabled,
                         visualScanResult = currentVisualScanResult,
                         workflow = assessmentSessionState.knockWorkflow,
                         onWorkflowEvent = assessmentSessionViewModel::onKnockEvent,
@@ -254,7 +272,29 @@ fun MelonSenseApp() {
                 )
             }
             composable(MelonSenseDestination.Settings.route) {
-                SettingsScreen()
+                SettingsScreen(
+                    trainingCaptureEnabled = trainingCaptureEnabled,
+                    cleanupState = retentionCleanupState,
+                    onTrainingCaptureEnabledChange = { enabled ->
+                        captureSettingsRepository.setEnabled(enabled)
+                        trainingCaptureEnabled = enabled
+                    },
+                    onDeleteExpiredMedia = {
+                        if (!retentionCleanupState.canStart) return@SettingsScreen
+                        retentionCleanupState = retentionCleanupState.reduce(RetentionCleanupEvent.Requested)
+                        coroutineScope.launch {
+                            try {
+                                val purgedCount = trainingRetentionRepository.purgeExpired(System.currentTimeMillis())
+                                retentionCleanupState =
+                                    retentionCleanupState.reduce(RetentionCleanupEvent.Succeeded(purgedCount))
+                            } catch (exception: CancellationException) {
+                                throw exception
+                            } catch (exception: Exception) {
+                                retentionCleanupState = retentionCleanupState.reduce(RetentionCleanupEvent.Failed)
+                            }
+                        }
+                    },
+                )
             }
         }
     }
