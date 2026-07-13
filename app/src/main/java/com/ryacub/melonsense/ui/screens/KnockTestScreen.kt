@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -39,6 +41,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -178,7 +185,7 @@ fun KnockTestScreen(
 }
 
 @Composable
-private fun KnockTestContent(
+internal fun KnockTestContent(
     visualScanResult: VisualScanResult?,
     validKnocks: List<KnockCapture>,
     lastCapture: KnockCapture?,
@@ -192,6 +199,7 @@ private fun KnockTestContent(
         modifier =
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -213,46 +221,47 @@ private fun KnockTestContent(
             knockTestState = knockTestState,
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            FilledTonalButton(
-                onClick = onCaptureKnock,
-                modifier = Modifier.weight(1f),
-                enabled = knockTestState.canCapture(validKnockCount),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.GraphicEq,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    text =
-                        if (knockTestState.isRecording) {
-                            stringResource(R.string.knock_recording)
-                        } else {
-                            stringResource(R.string.knock_capture_action)
-                        },
-                )
-            }
-            Button(
-                onClick = onAnalyzeResult,
-                modifier = Modifier.weight(1f),
-                enabled = knockTestState.canAnalyze(validKnockCount),
-            ) {
-                Text(
-                    stringResource(
-                        if (knockTestState.isAnalyzing) {
-                            R.string.knock_analyzing
-                        } else {
-                            R.string.knock_primary_action
-                        },
-                    ),
-                )
-            }
-        }
+        ResponsiveActionGroup(
+            firstAction = { modifier ->
+                FilledTonalButton(
+                    onClick = onCaptureKnock,
+                    modifier = modifier,
+                    enabled = knockTestState.canCapture(validKnockCount),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.GraphicEq,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(
+                        text =
+                            if (knockTestState.isRecording) {
+                                stringResource(R.string.knock_recording)
+                            } else {
+                                stringResource(R.string.knock_capture_action)
+                            },
+                    )
+                }
+            },
+            secondAction = { modifier ->
+                Button(
+                    onClick = onAnalyzeResult,
+                    modifier = modifier,
+                    enabled = knockTestState.canAnalyze(validKnockCount),
+                ) {
+                    Text(
+                        stringResource(
+                            if (knockTestState.isAnalyzing) {
+                                R.string.knock_analyzing
+                            } else {
+                                R.string.knock_primary_action
+                            },
+                        ),
+                    )
+                }
+            },
+        )
     }
 }
 
@@ -265,7 +274,7 @@ private fun VisualSummary(visualScanResult: VisualScanResult?) {
                     stringResource(
                         R.string.knock_visual_result_available,
                         result.score,
-                        result.confidencePercent,
+                        stringResource(signalStrengthFor(result.confidencePercent).labelRes),
                     )
                 } ?: stringResource(R.string.knock_visual_result_missing),
             modifier = Modifier.padding(16.dp),
@@ -280,7 +289,14 @@ private fun KnockProgressCard(
     lastCapture: KnockCapture?,
     knockTestState: KnockTestState,
 ) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {
+                    liveRegion = LiveRegionMode.Polite
+                },
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -338,17 +354,22 @@ private fun KnockSlot(
     index: Int,
     isValid: Boolean,
 ) {
+    val slotDescription =
+        stringResource(
+            if (isValid) R.string.knock_slot_valid else R.string.knock_slot_waiting,
+            index + 1,
+        )
     Column(
+        modifier =
+            Modifier.clearAndSetSemantics {
+                contentDescription = slotDescription
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(
             imageVector = if (isValid) Icons.Filled.TaskAlt else Icons.Filled.RadioButtonUnchecked,
-            contentDescription =
-                stringResource(
-                    if (isValid) R.string.knock_slot_valid else R.string.knock_slot_waiting,
-                    index + 1,
-                ),
+            contentDescription = null,
             tint =
                 if (isValid) {
                     MaterialTheme.colorScheme.primary
@@ -369,6 +390,7 @@ private fun MicrophonePermissionContent(onRequestPermission: () -> Unit) {
         modifier =
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {

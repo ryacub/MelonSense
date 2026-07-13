@@ -20,6 +20,7 @@ All notable project changes should be recorded here.
 
 ### Changed
 
+- Assessment and settings screens now stay reachable with large text and describe model certainty as signal strength.
 - History now separates pick review from training export and uses focused outcome editing.
 - Navigation now keeps Knock Test and Result inside the assessment flow while limiting the bottom bar to top-level screens.
 - Training dataset exports are now atomic, shareable ZIP files with progress, failure, and retry states.

@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -44,6 +47,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -170,6 +177,7 @@ private fun ScanContent(
         modifier =
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -177,7 +185,7 @@ private fun ScanContent(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .aspectRatio(1f)
                     .clip(RoundedCornerShape(8.dp)),
         ) {
             CameraPreview(
@@ -191,31 +199,32 @@ private fun ScanContent(
             visualScanResult = visualScanResult,
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            FilledTonalButton(
-                onClick = onCaptureFrame,
-                modifier = Modifier.weight(1f),
-                enabled = scanAssessmentState.canCapture,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CameraAlt,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(stringResource(scanAssessmentState.primaryActionRes))
-            }
-            Button(
-                onClick = onStartKnockTest,
-                modifier = Modifier.weight(1f),
-                enabled = scanAssessmentState.canStartKnockTest && visualScanResult != null,
-            ) {
-                Text(stringResource(R.string.scan_continue_action))
-            }
-        }
+        ResponsiveActionGroup(
+            firstAction = { modifier ->
+                FilledTonalButton(
+                    onClick = onCaptureFrame,
+                    modifier = modifier,
+                    enabled = scanAssessmentState.canCapture,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CameraAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(stringResource(scanAssessmentState.primaryActionRes))
+                }
+            },
+            secondAction = { modifier ->
+                Button(
+                    onClick = onStartKnockTest,
+                    modifier = modifier,
+                    enabled = scanAssessmentState.canStartKnockTest && visualScanResult != null,
+                ) {
+                    Text(stringResource(R.string.scan_continue_action))
+                }
+            },
+        )
     }
 }
 
@@ -225,6 +234,7 @@ private fun CameraPreview(
     modifier: Modifier = Modifier,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val previewDescription = stringResource(R.string.scan_camera_preview_description)
 
     DisposableEffect(lifecycleOwner, cameraController) {
         cameraController.bindToLifecycle(lifecycleOwner)
@@ -234,7 +244,10 @@ private fun CameraPreview(
     }
 
     AndroidView(
-        modifier = modifier,
+        modifier =
+            modifier.semantics {
+                contentDescription = previewDescription
+            },
         factory = { previewContext ->
             PreviewView(previewContext).apply {
                 scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -245,11 +258,18 @@ private fun CameraPreview(
 }
 
 @Composable
-private fun VisualScanStatus(
+internal fun VisualScanStatus(
     scanAssessmentState: ScanAssessmentState,
     visualScanResult: VisualScanResult?,
 ) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {
+                    liveRegion = LiveRegionMode.Polite
+                },
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -287,8 +307,8 @@ private fun VisualScanStatus(
                 Text(
                     text =
                         stringResource(
-                            R.string.scan_visual_confidence,
-                            visualScanResult.confidencePercent,
+                            R.string.scan_visual_signal,
+                            stringResource(signalStrengthFor(visualScanResult.confidencePercent).labelRes),
                         ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -309,6 +329,7 @@ private fun CameraPermissionContent(onRequestPermission: () -> Unit) {
         modifier =
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {

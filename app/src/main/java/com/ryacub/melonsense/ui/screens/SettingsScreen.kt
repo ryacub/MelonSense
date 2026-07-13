@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -15,7 +18,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +39,7 @@ fun SettingsScreen(
         modifier =
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
@@ -42,7 +49,14 @@ fun SettingsScreen(
             fontWeight = FontWeight.SemiBold,
         )
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = trainingCaptureEnabled,
+                        role = Role.Switch,
+                        onValueChange = onTrainingCaptureEnabledChange,
+                    ).semantics(mergeDescendants = true) {},
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -63,11 +77,8 @@ fun SettingsScreen(
             }
             Switch(
                 checked = trainingCaptureEnabled,
-                onCheckedChange = onTrainingCaptureEnabledChange,
-                modifier =
-                    Modifier.semantics {
-                        contentDescription = trainingCaptureLabel
-                    },
+                onCheckedChange = null,
+                modifier = Modifier.clearAndSetSemantics {},
             )
         }
         Text(
@@ -100,12 +111,20 @@ fun SettingsScreen(
                         ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    modifier =
+                        Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
                 )
             RetentionCleanupPhase.Failed ->
                 Text(
                     text = stringResource(R.string.settings_cleanup_failed),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
+                    modifier =
+                        Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
                 )
             else -> Unit
         }
