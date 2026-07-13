@@ -2,8 +2,11 @@ package com.ryacub.melonsense.ui.navigation
 
 import android.content.Intent
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -23,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -136,46 +140,17 @@ fun MelonSenseApp() {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(selectedDestination.titleRes)) },
+            MelonSenseTopBar(
+                destination = selectedDestination,
+                onNavigateUp = navController::popBackStack,
             )
         },
         bottomBar = {
-            NavigationBar {
-                MelonSenseDestination.entries.forEach { destination ->
-                    val destinationEnabled =
-                        !destination.requiresVisualResult || assessmentSessionState.scanWorkflow.visualScanResult != null
-                    NavigationBarItem(
-                        selected = selectedDestination == destination,
-                        enabled = destinationEnabled,
-                        onClick = {
-                            if (!destinationEnabled) {
-                                navController.navigate(MelonSenseDestination.Scan.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                                return@NavigationBarItem
-                            }
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon,
-                                contentDescription = stringResource(destination.titleRes),
-                            )
-                        },
-                        label = { Text(stringResource(destination.titleRes)) },
-                    )
-                }
+            if (selectedDestination.isTopLevel) {
+                MelonSenseBottomBar(
+                    selectedDestination = selectedDestination,
+                    onNavigate = navController::navigateToTopLevel,
+                )
             }
         },
     ) { innerPadding ->
@@ -237,7 +212,7 @@ fun MelonSenseApp() {
                             try {
                                 historyRepository.savePickedAssessment(assessmentResult)
                                 assessmentSessionViewModel.onSaveEvent(PickedAssessmentSaveEvent.SaveSucceeded)
-                                navController.navigate(MelonSenseDestination.History.route)
+                                navController.navigateToTopLevel(MelonSenseDestination.History)
                             } catch (exception: CancellationException) {
                                 throw exception
                             } catch (exception: Exception) {
@@ -337,5 +312,59 @@ fun MelonSenseApp() {
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun MelonSenseTopBar(
+    destination: MelonSenseDestination,
+    onNavigateUp: () -> Unit,
+) {
+    TopAppBar(
+        title = { Text(stringResource(destination.titleRes)) },
+        navigationIcon = {
+            if (!destination.isTopLevel) {
+                IconButton(onClick = onNavigateUp) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.navigate_up),
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+internal fun MelonSenseBottomBar(
+    selectedDestination: MelonSenseDestination,
+    onNavigate: (MelonSenseDestination) -> Unit,
+) {
+    NavigationBar {
+        MelonSenseDestination.topLevelEntries.forEach { destination ->
+            NavigationBarItem(
+                selected = selectedDestination == destination,
+                onClick = { onNavigate(destination) },
+                icon = {
+                    Icon(
+                        imageVector = destination.icon,
+                        contentDescription = stringResource(destination.titleRes),
+                    )
+                },
+                label = { Text(stringResource(destination.titleRes)) },
+            )
+        }
+    }
+}
+
+internal fun NavHostController.navigateToTopLevel(destination: MelonSenseDestination) {
+    require(destination.isTopLevel) { "Only top-level destinations can use top-level navigation." }
+    navigate(destination.route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
     }
 }
