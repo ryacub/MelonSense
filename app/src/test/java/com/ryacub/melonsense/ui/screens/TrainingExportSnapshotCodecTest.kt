@@ -8,14 +8,15 @@ class TrainingExportSnapshotCodecTest {
 
     @Test
     fun decode_normalizesRunningStateToFailed() {
-        val encoded = codec.encode(
-            TrainingExportState(
-                phase = TrainingExportPhase.Running,
-                archivePath = null,
-                entryCount = null,
-                shareFailed = false,
-            ),
-        )
+        val encoded =
+            codec.encode(
+                TrainingExportState(
+                    phase = TrainingExportPhase.Running,
+                    archivePath = null,
+                    entryCount = null,
+                    shareFailed = false,
+                ),
+            )
 
         val decoded = codec.decode(encoded)
 
@@ -34,14 +35,15 @@ class TrainingExportSnapshotCodecTest {
 
     @Test
     fun decode_preservesSucceededStateWithArchive() {
-        val encoded = codec.encode(
-            TrainingExportState(
-                phase = TrainingExportPhase.Succeeded,
-                archivePath = "/path/to/archive.zip",
-                entryCount = 5,
-                shareFailed = false,
-            ),
-        )
+        val encoded =
+            codec.encode(
+                TrainingExportState(
+                    phase = TrainingExportPhase.Succeeded,
+                    archivePath = "/path/to/archive.zip",
+                    entryCount = 5,
+                    shareFailed = false,
+                ),
+            )
 
         val decoded = codec.decode(encoded)
 
