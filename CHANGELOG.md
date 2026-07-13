@@ -20,6 +20,7 @@ All notable project changes should be recorded here.
 
 ### Changed
 
+- Training dataset exports are now atomic, shareable ZIP files with progress, failure, and retry states.
 - Settings now controls default-on training-media retention and supports manual expired-media cleanup.
 - Unrated history outcomes now require explicit sweetness and texture selections before saving.
 - Assessment progress now survives recreation, and starting a new scan invalidates stale knock and result state.

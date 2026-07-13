@@ -72,7 +72,15 @@
     <string name="training_queue_ready">Ready</string>
     <string name="training_queue_blocked">Blocked: %1$s</string>
     <string name="training_queue_export">Export Dataset</string>
-    <string name="training_queue_last_export">Last export: %1$s</string>
+    <string name="training_queue_exporting">Exporting...</string>
+    <plurals name="training_queue_export_succeeded">
+        <item quantity="one">Exported %1$d training item.</item>
+        <item quantity="other">Exported %1$d training items.</item>
+    </plurals>
+    <string name="training_queue_export_failed">Export failed. Check available storage and try again.</string>
+    <string name="training_queue_share">Share Export</string>
+    <string name="training_queue_share_chooser">Share training export</string>
+    <string name="training_queue_share_failed">Could not open sharing. The completed export is still saved.</string>
     <string name="training_block_none">Ready</string>
     <string name="training_block_needs_outcome">Needs outcome</string>
     <string name="training_block_already_exported">Already exported</string>

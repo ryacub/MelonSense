@@ -13,6 +13,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
+import java.util.zip.ZipFile
 
 class TrainingDatasetExportTest {
     @get:Rule
@@ -119,6 +121,57 @@ class TrainingDatasetExportTest {
         assertTrue(bundleText.contains(photoFile.absolutePath))
         assertTrue(bundleText.contains(audioFile.absolutePath))
         assertTrue(bundle.manifestFile.parentFile?.resolve("media")?.listFiles().orEmpty().size == 2)
+        assertTrue(bundle.archiveFile.isFile)
+        ZipFile(bundle.archiveFile).use { archive ->
+            assertTrue(archive.getEntry("manifest.jsonl") != null)
+            assertEquals(2, archive.entries().asSequence().count { entry -> entry.name.startsWith("media/") })
+        }
+        assertTrue(bundleText.contains("\"path\":\"media/"))
+        assertFalse(bundleText.contains("\"path\":\"${outputDirectory.absolutePath}"))
+    }
+
+    @Test
+    fun writeBundle_rejectsCompletedTimestampCollisionWithoutOverwriting() {
+        val photoFile = temporaryFolder.newFile("collision-photo.jpg")
+        val outputDirectory = temporaryFolder.newFolder("collision-exports")
+        val finalDirectory = File(outputDirectory, "dataset-3000").apply { mkdirs() }
+        val marker = File(finalDirectory, "keep.txt").apply { writeText("existing") }
+        val queue =
+            TrainingDatasetExporter.buildQueue(
+                historyItems = listOf(sampleHistoryItem()),
+                captures = listOf(sampleCapture(photoPath = photoFile.absolutePath)),
+                nowMillis = 2_000,
+            )
+
+        runCatching {
+            TrainingDatasetExporter.writeBundle(queue.filter { it.isEligible }, outputDirectory, 3_000)
+        }.onSuccess { throw AssertionError("Expected timestamp collision to fail") }
+
+        assertEquals("existing", marker.readText())
+        assertFalse(File(outputDirectory, "dataset-3000.zip").exists())
+    }
+
+    @Test
+    fun writeBundle_copyFailureRemovesTemporaryAndFinalOutput() {
+        val sourceFile = temporaryFolder.newFile("copy-failure.jpg")
+        val outputDirectory = temporaryFolder.newFolder("failed-exports")
+        val queue =
+            TrainingDatasetExporter.buildQueue(
+                historyItems = listOf(sampleHistoryItem()),
+                captures = listOf(sampleCapture(photoPath = sourceFile.absolutePath)),
+                nowMillis = 2_000,
+            )
+
+        runCatching {
+            TrainingDatasetExporter.writeBundle(
+                eligibleItems = queue.filter { it.isEligible },
+                outputDirectory = outputDirectory,
+                createdAtMillis = 3_000,
+                copyArtifact = { _, _ -> throw java.io.IOException("forced copy failure") },
+            )
+        }.onSuccess { throw AssertionError("Expected artifact copy to fail") }
+
+        assertTrue(outputDirectory.listFiles().orEmpty().isEmpty())
     }
 
     @Test(expected = IllegalArgumentException::class)

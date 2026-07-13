@@ -1,5 +1,6 @@
 package com.ryacub.melonsense.ui.navigation
 
+import android.content.Intent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.room.withTransaction
+import com.ryacub.melonsense.R
 import com.ryacub.melonsense.data.history.RoomHistoryRepository
 import com.ryacub.melonsense.data.local.MelonSenseDatabase
 import com.ryacub.melonsense.data.training.FileTrainingMediaStore
@@ -48,6 +50,9 @@ import com.ryacub.melonsense.ui.screens.RetentionCleanupEvent
 import com.ryacub.melonsense.ui.screens.RetentionCleanupState
 import com.ryacub.melonsense.ui.screens.ScanScreen
 import com.ryacub.melonsense.ui.screens.SettingsScreen
+import com.ryacub.melonsense.ui.screens.TrainingExportEvent
+import com.ryacub.melonsense.ui.screens.TrainingExportIntentFactory
+import com.ryacub.melonsense.ui.screens.TrainingExportState
 import com.ryacub.melonsense.ui.session.AssessmentSessionViewModel
 import kotlinx.coroutines.launch
 import java.io.File
@@ -104,7 +109,7 @@ fun MelonSenseApp() {
         }
     val historyItems by historyRepository.historyItems.collectAsState(initial = emptyList())
     var trainingQueueItems by remember { mutableStateOf<List<TrainingQueueItem>>(emptyList()) }
-    var lastDatasetExportPath by remember { mutableStateOf<String?>(null) }
+    var trainingExportState by remember { mutableStateOf(TrainingExportState()) }
     var trainingCaptureEnabled by remember { mutableStateOf(captureSettingsRepository.isEnabled) }
     var retentionCleanupState by remember { mutableStateOf(RetentionCleanupState()) }
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -246,17 +251,52 @@ fun MelonSenseApp() {
                 HistoryScreen(
                     historyItems = historyItems,
                     trainingQueueItems = trainingQueueItems,
-                    lastDatasetExportPath = lastDatasetExportPath,
+                    trainingExportState = trainingExportState,
                     onExportTrainingDataset = {
+                        if (!trainingExportState.canStart) return@HistoryScreen
+                        trainingExportState = trainingExportState.reduce(TrainingExportEvent.Requested)
                         coroutineScope.launch {
-                            val nowMillis = System.currentTimeMillis()
-                            val bundle =
-                                trainingDatasetExportRepository.exportEligible(
-                                    nowMillis = nowMillis,
-                                    createdAtMillis = nowMillis,
-                                )
-                            lastDatasetExportPath = bundle.manifestFile.absolutePath
-                            trainingQueueItems = trainingDatasetExportRepository.getQueue(System.currentTimeMillis())
+                            try {
+                                val nowMillis = System.currentTimeMillis()
+                                val bundle =
+                                    trainingDatasetExportRepository.exportEligible(
+                                        nowMillis = nowMillis,
+                                        createdAtMillis = nowMillis,
+                                    )
+                                trainingExportState =
+                                    trainingExportState.reduce(
+                                        TrainingExportEvent.Succeeded(
+                                            archivePath = bundle.archiveFile.absolutePath,
+                                            entryCount = bundle.entryCount,
+                                        ),
+                                    )
+                                trainingQueueItems = emptyList()
+                            } catch (exception: CancellationException) {
+                                trainingExportState = trainingExportState.reduce(TrainingExportEvent.Cancelled)
+                                throw exception
+                            } catch (exception: Exception) {
+                                trainingExportState = trainingExportState.reduce(TrainingExportEvent.Failed)
+                            }
+                        }
+                    },
+                    onShareTrainingDataset = {
+                        val archivePath = trainingExportState.archivePath ?: return@HistoryScreen
+                        trainingExportState = trainingExportState.reduce(TrainingExportEvent.ShareStarted)
+                        try {
+                            val shareSpec = TrainingExportIntentFactory.create(File(archivePath))
+                            val shareIntent = TrainingExportIntentFactory.createIntent(context, shareSpec)
+                            if (!TrainingExportIntentFactory.hasShareTarget(context, shareIntent)) {
+                                trainingExportState = trainingExportState.reduce(TrainingExportEvent.ShareFailed)
+                                return@HistoryScreen
+                            }
+                            context.startActivity(
+                                Intent.createChooser(
+                                    shareIntent,
+                                    context.getString(R.string.training_queue_share_chooser),
+                                ),
+                            )
+                        } catch (exception: Exception) {
+                            trainingExportState = trainingExportState.reduce(TrainingExportEvent.ShareFailed)
                         }
                     },
                     onSaveOutcome = { pickId, resultLabel, sweetness, texture ->

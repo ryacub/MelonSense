@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,8 +41,9 @@ import com.ryacub.melonsense.domain.model.ResultLabel
 fun HistoryScreen(
     historyItems: List<PickHistoryItem>,
     trainingQueueItems: List<TrainingQueueItem>,
-    lastDatasetExportPath: String?,
+    trainingExportState: TrainingExportState,
     onExportTrainingDataset: () -> Unit,
+    onShareTrainingDataset: () -> Unit,
     onSaveOutcome: (
         pickId: Long,
         resultLabel: ResultLabel,
@@ -84,8 +86,9 @@ fun HistoryScreen(
 
         TrainingQueueSection(
             queueItems = trainingQueueItems,
-            lastDatasetExportPath = lastDatasetExportPath,
+            exportState = trainingExportState,
             onExportTrainingDataset = onExportTrainingDataset,
+            onShareTrainingDataset = onShareTrainingDataset,
         )
 
         historyItems.forEach { item ->
@@ -108,8 +111,9 @@ fun HistoryScreen(
 @Composable
 private fun TrainingQueueSection(
     queueItems: List<TrainingQueueItem>,
-    lastDatasetExportPath: String?,
+    exportState: TrainingExportState,
     onExportTrainingDataset: () -> Unit,
+    onShareTrainingDataset: () -> Unit,
 ) {
     val eligibleCount = queueItems.count { item -> item.isEligible }
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
@@ -138,16 +142,55 @@ private fun TrainingQueueSection(
             }
             Button(
                 onClick = onExportTrainingDataset,
-                enabled = eligibleCount > 0,
+                enabled = eligibleCount > 0 && exportState.canStart,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.training_queue_export))
-            }
-            lastDatasetExportPath?.let { path ->
                 Text(
-                    text = stringResource(R.string.training_queue_last_export, path),
-                    style = MaterialTheme.typography.bodySmall,
+                    stringResource(
+                        if (exportState.phase == TrainingExportPhase.Running) {
+                            R.string.training_queue_exporting
+                        } else {
+                            R.string.training_queue_export
+                        },
+                    ),
                 )
+            }
+            when (exportState.phase) {
+                TrainingExportPhase.Idle,
+                TrainingExportPhase.Running,
+                -> Unit
+                TrainingExportPhase.Failed ->
+                    Text(
+                        text = stringResource(R.string.training_queue_export_failed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                TrainingExportPhase.Succeeded -> {
+                    Text(
+                        text =
+                            pluralStringResource(
+                                R.plurals.training_queue_export_succeeded,
+                                exportState.entryCount ?: 0,
+                                exportState.entryCount ?: 0,
+                            ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    OutlinedButton(
+                        onClick = onShareTrainingDataset,
+                        enabled = exportState.canShare,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.training_queue_share))
+                    }
+                    if (exportState.shareFailed) {
+                        Text(
+                            text = stringResource(R.string.training_queue_share_failed),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
         }
     }

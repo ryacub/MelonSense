@@ -8,6 +8,10 @@ import com.ryacub.melonsense.data.local.TrainingCaptureEntity
 import com.ryacub.melonsense.data.local.artifacts
 import com.ryacub.melonsense.domain.model.TrainingMediaArtifact
 import java.io.File
+import java.io.IOException
+import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 enum class TrainingQueueBlockReason {
     None,
@@ -29,9 +33,16 @@ data class TrainingQueueItem(
 data class TrainingDatasetBundle(
     val bundleDirectory: File,
     val manifestFile: File,
+    val archiveFile: File,
     val entryCount: Int,
     val createdAtMillis: Long,
-)
+) {
+    fun deleteOutput() {
+        val archiveDeleted = !archiveFile.exists() || archiveFile.delete()
+        val directoryDeleted = !bundleDirectory.exists() || bundleDirectory.deleteRecursively()
+        check(archiveDeleted && directoryDeleted) { "Cannot remove incomplete export output." }
+    }
+}
 
 object TrainingDatasetExporter {
     private const val SCHEMA_VERSION = 1
@@ -62,26 +73,77 @@ object TrainingDatasetExporter {
         eligibleItems: List<TrainingQueueItem>,
         outputDirectory: File,
         createdAtMillis: Long,
+        copyArtifact: (source: File, destination: File) -> Unit = { source, destination ->
+            source.copyTo(destination, overwrite = false)
+        },
     ): TrainingDatasetBundle {
         require(eligibleItems.isNotEmpty()) { "Cannot export an empty training dataset." }
-        val bundleDirectory = File(outputDirectory, "dataset-$createdAtMillis")
-        val mediaDirectory = File(bundleDirectory, "media")
-        mediaDirectory.mkdirs()
-        val manifestFile = File(bundleDirectory, "manifest.jsonl")
-        manifestFile.writeText(
-            eligibleItems.joinToString(separator = "\n", postfix = "\n") { item ->
-                item.toJsonLine(
-                    exportCreatedAtMillis = createdAtMillis,
-                    exportedArtifacts = item.copyArtifactsTo(mediaDirectory),
-                )
-            },
-        )
-        return TrainingDatasetBundle(
-            bundleDirectory = bundleDirectory,
-            manifestFile = manifestFile,
-            entryCount = eligibleItems.size,
-            createdAtMillis = createdAtMillis,
-        )
+        check(outputDirectory.mkdirs() || outputDirectory.isDirectory) { "Cannot create export directory." }
+        val bundleName = "dataset-$createdAtMillis"
+        val bundleDirectory = File(outputDirectory, bundleName)
+        val archiveFile = File(outputDirectory, "$bundleName.zip")
+        check(!bundleDirectory.exists() && !archiveFile.exists()) { "An export already exists for this timestamp." }
+
+        val temporarySuffix = UUID.randomUUID().toString()
+        val temporaryDirectory = File(outputDirectory, ".$bundleName-$temporarySuffix.tmp")
+        val temporaryArchive = File(outputDirectory, ".$bundleName-$temporarySuffix.zip.tmp")
+        var publishedDirectory = false
+        try {
+            val mediaDirectory = File(temporaryDirectory, "media")
+            check(mediaDirectory.mkdirs()) { "Cannot create temporary export directory." }
+            val manifestFile = File(temporaryDirectory, "manifest.jsonl")
+            manifestFile.writeText(
+                eligibleItems.joinToString(separator = "\n", postfix = "\n") { item ->
+                    item.toJsonLine(
+                        exportCreatedAtMillis = createdAtMillis,
+                        exportedArtifacts = item.copyArtifactsTo(mediaDirectory, copyArtifact),
+                    )
+                },
+            )
+            writeArchive(temporaryDirectory, temporaryArchive)
+            moveOrThrow(temporaryDirectory, bundleDirectory)
+            publishedDirectory = true
+            moveOrThrow(temporaryArchive, archiveFile)
+            return TrainingDatasetBundle(
+                bundleDirectory = bundleDirectory,
+                manifestFile = File(bundleDirectory, "manifest.jsonl"),
+                archiveFile = archiveFile,
+                entryCount = eligibleItems.size,
+                createdAtMillis = createdAtMillis,
+            )
+        } catch (exception: Exception) {
+            temporaryArchive.delete()
+            temporaryDirectory.deleteRecursively()
+            if (publishedDirectory) bundleDirectory.deleteRecursively()
+            archiveFile.delete()
+            throw exception
+        }
+    }
+
+    private fun writeArchive(
+        bundleDirectory: File,
+        archiveFile: File,
+    ) {
+        ZipOutputStream(archiveFile.outputStream().buffered()).use { output ->
+            bundleDirectory
+                .walkTopDown()
+                .filter { file -> file.isFile }
+                .sortedBy { file -> file.relativeTo(bundleDirectory).invariantSeparatorsPath }
+                .forEach { file ->
+                    output.putNextEntry(ZipEntry(file.relativeTo(bundleDirectory).invariantSeparatorsPath))
+                    file.inputStream().buffered().use { input -> input.copyTo(output) }
+                    output.closeEntry()
+                }
+        }
+    }
+
+    private fun moveOrThrow(
+        source: File,
+        destination: File,
+    ) {
+        if (!source.renameTo(destination)) {
+            throw IOException("Cannot publish export output ${destination.name}.")
+        }
     }
 
     private fun blockReason(
@@ -117,7 +179,10 @@ object TrainingDatasetExporter {
         return TrainingQueueBlockReason.None
     }
 
-    private fun TrainingQueueItem.copyArtifactsTo(mediaDirectory: File): List<ExportedArtifact> {
+    private fun TrainingQueueItem.copyArtifactsTo(
+        mediaDirectory: File,
+        copyArtifact: (source: File, destination: File) -> Unit,
+    ): List<ExportedArtifact> {
         val pickHistoryId = historyItem.id
         return requireNotNull(capture)
             .artifacts()
@@ -128,10 +193,10 @@ object TrainingDatasetExporter {
                         mediaDirectory,
                         "$pickHistoryId-${artifact.kind.name.lowercase()}-${sourceFile.name}",
                     )
-                sourceFile.copyTo(exportedFile, overwrite = true)
+                copyArtifact(sourceFile, exportedFile)
                 ExportedArtifact(
                     source = artifact,
-                    exportedPath = exportedFile.absolutePath,
+                    exportedPath = "media/${exportedFile.name}",
                 )
             }
     }

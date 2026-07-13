@@ -32,11 +32,17 @@ class RoomHistoryRepositoryInstrumentedTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(databaseName)
+        File(context.cacheDir, "dataset-exports").deleteRecursively()
+        File(context.cacheDir, "blocked-dataset-exports").deleteRecursively()
+        File(context.cacheDir, "transaction-failure-exports").deleteRecursively()
     }
 
     @After
     fun tearDown() {
         context.deleteDatabase(databaseName)
+        File(context.cacheDir, "dataset-exports").deleteRecursively()
+        File(context.cacheDir, "blocked-dataset-exports").deleteRecursively()
+        File(context.cacheDir, "transaction-failure-exports").deleteRecursively()
     }
 
     @Test
@@ -184,10 +190,14 @@ class RoomHistoryRepositoryInstrumentedTest {
                     createdAtMillis = 1_788_100_001_000,
                 )
 
-            val savedItem = historyRepository.getHistoryItem(savedId)
-            val trainingCapture = database.trainingCaptureDao().getByPickHistoryId(savedId)
             assertEquals(1, bundle.entryCount)
             assertEquals(true, bundle.manifestFile.exists())
+            assertEquals(true, bundle.archiveFile.exists())
+            database.close()
+
+            val reopenedDatabase = openDatabase()
+            val savedItem = RoomHistoryRepository(reopenedDatabase).getHistoryItem(savedId)
+            val trainingCapture = reopenedDatabase.trainingCaptureDao().getByPickHistoryId(savedId)
             assertNotNull(savedItem)
             requireNotNull(savedItem)
             assertEquals(TrainingExportStatus.Exported, savedItem.trainingExportStatus)
@@ -196,6 +206,100 @@ class RoomHistoryRepositoryInstrumentedTest {
             requireNotNull(trainingCapture)
             assertEquals(TrainingExportStatus.Exported, trainingCapture.exportStatus)
             assertEquals(1_788_100_001_000, trainingCapture.exportedAtMillis)
+            reopenedDatabase.close()
+        }
+
+    @Test
+    fun datasetExportOutputFailureLeavesRowsPending() =
+        runBlocking {
+            val photoFile = File(context.cacheDir, "failed-dataset-photo.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+            val audioFile = File(context.cacheDir, "failed-dataset-audio.pcm16.gz").apply { writeBytes(byteArrayOf(4, 5, 6)) }
+            val blockedOutput = File(context.cacheDir, "blocked-dataset-exports").apply { writeText("not a directory") }
+            val database = openDatabase()
+            val historyRepository = RoomHistoryRepository(database)
+            val savedId =
+                historyRepository.savePickedAssessment(
+                    sampleAssessment(
+                        trainingMedia =
+                            sampleTrainingMedia(
+                                photoPath = photoFile.absolutePath,
+                                audioPath = audioFile.absolutePath,
+                            ),
+                    ),
+                )
+            historyRepository.saveOutcome(
+                pickId = savedId,
+                resultLabel = ResultLabel.GoodCandidate,
+                sweetness = SweetnessRating.Sweet,
+                texture = TextureRating.Crisp,
+            )
+
+            val failure =
+                runCatching {
+                    TrainingDatasetExportRepository(
+                        database = database,
+                        outputDirectory = blockedOutput,
+                    ).exportEligible(
+                        nowMillis = 1_788_100_000_000,
+                        createdAtMillis = 1_788_100_001_000,
+                    )
+                }.exceptionOrNull()
+
+            assertNotNull(failure)
+            val savedItem = historyRepository.getHistoryItem(savedId)
+            val trainingCapture = database.trainingCaptureDao().getByPickHistoryId(savedId)
+            requireNotNull(savedItem)
+            requireNotNull(trainingCapture)
+            assertEquals(TrainingExportStatus.Pending, savedItem.trainingExportStatus)
+            assertEquals(TrainingExportStatus.Pending, trainingCapture.exportStatus)
+            database.close()
+        }
+
+    @Test
+    fun datasetExportTransactionFailureRemovesPublishedOutputAndLeavesRowsPending() =
+        runBlocking {
+            val photoFile = File(context.cacheDir, "transaction-failure-photo.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+            val audioFile = File(context.cacheDir, "transaction-failure-audio.pcm16.gz").apply { writeBytes(byteArrayOf(4, 5, 6)) }
+            val outputDirectory = File(context.cacheDir, "transaction-failure-exports")
+            val database = openDatabase()
+            val historyRepository = RoomHistoryRepository(database)
+            val savedId =
+                historyRepository.savePickedAssessment(
+                    sampleAssessment(
+                        trainingMedia =
+                            sampleTrainingMedia(
+                                photoPath = photoFile.absolutePath,
+                                audioPath = audioFile.absolutePath,
+                            ),
+                    ),
+                )
+            historyRepository.saveOutcome(
+                pickId = savedId,
+                resultLabel = ResultLabel.GoodCandidate,
+                sweetness = SweetnessRating.Sweet,
+                texture = TextureRating.Crisp,
+            )
+
+            val failure =
+                runCatching {
+                    TrainingDatasetExportRepository(
+                        database = database,
+                        outputDirectory = outputDirectory,
+                        runInTransaction = { throw java.io.IOException("forced transaction failure") },
+                    ).exportEligible(
+                        nowMillis = 1_788_100_000_000,
+                        createdAtMillis = 1_788_100_001_000,
+                    )
+                }.exceptionOrNull()
+
+            assertNotNull(failure)
+            assertEquals(true, outputDirectory.listFiles().orEmpty().isEmpty())
+            val savedItem = historyRepository.getHistoryItem(savedId)
+            val trainingCapture = database.trainingCaptureDao().getByPickHistoryId(savedId)
+            requireNotNull(savedItem)
+            requireNotNull(trainingCapture)
+            assertEquals(TrainingExportStatus.Pending, savedItem.trainingExportStatus)
+            assertEquals(TrainingExportStatus.Pending, trainingCapture.exportStatus)
             database.close()
         }
 
