@@ -106,49 +106,71 @@ class TrainingDatasetExportTest {
                 createdAtMillis = 3_000,
             )
 
-        val bundleText = bundle.manifestFile.readText()
         assertEquals(1, bundle.entryCount)
-        assertTrue(bundleText.contains("\"schemaVersion\":1"))
-        assertTrue(bundleText.contains("\"labelSource\":\"user_feedback\""))
-        assertTrue(bundleText.contains("\"pickHistoryId\":42"))
-        assertTrue(bundleText.contains("\"resultLabel\":\"GoodCandidate\""))
-        assertTrue(bundleText.contains("\"sweetness\":\"Sweet\""))
-        assertTrue(bundleText.contains("\"texture\":\"Crisp\""))
-        assertTrue(bundleText.contains("\"visualScore\":74"))
-        assertTrue(bundleText.contains("\"audioScore\":82"))
-        assertTrue(bundleText.contains("\"trainingExportStatus\":\"Exported\""))
-        assertTrue(bundleText.contains("\"trainingCaptureStatus\":\"Exported\""))
-        assertTrue(bundleText.contains(photoFile.absolutePath))
-        assertTrue(bundleText.contains(audioFile.absolutePath))
-        assertTrue(bundle.manifestFile.parentFile?.resolve("media")?.listFiles().orEmpty().size == 2)
         assertTrue(bundle.archiveFile.isFile)
         ZipFile(bundle.archiveFile).use { archive ->
             assertTrue(archive.getEntry("manifest.jsonl") != null)
             assertEquals(2, archive.entries().asSequence().count { entry -> entry.name.startsWith("media/") })
+            val manifestEntry = archive.getInputStream(archive.getEntry("manifest.jsonl"))
+            val bundleText = manifestEntry.bufferedReader().readText()
+            assertTrue(bundleText.contains("\"schemaVersion\":1"))
+            assertTrue(bundleText.contains("\"labelSource\":\"user_feedback\""))
+            assertTrue(bundleText.contains("\"pickHistoryId\":42"))
+            assertTrue(bundleText.contains("\"resultLabel\":\"GoodCandidate\""))
+            assertTrue(bundleText.contains("\"sweetness\":\"Sweet\""))
+            assertTrue(bundleText.contains("\"texture\":\"Crisp\""))
+            assertTrue(bundleText.contains("\"visualScore\":74"))
+            assertTrue(bundleText.contains("\"audioScore\":82"))
+            assertTrue(bundleText.contains("\"trainingExportStatus\":\"Exported\""))
+            assertTrue(bundleText.contains("\"trainingCaptureStatus\":\"Exported\""))
+            assertTrue(bundleText.contains(photoFile.absolutePath))
+            assertTrue(bundleText.contains(audioFile.absolutePath))
+            assertTrue(bundleText.contains("\"path\":\"media/"))
+            assertFalse(bundleText.contains("\"path\":\"${outputDirectory.absolutePath}"))
         }
-        assertTrue(bundleText.contains("\"path\":\"media/"))
-        assertFalse(bundleText.contains("\"path\":\"${outputDirectory.absolutePath}"))
     }
 
     @Test
-    fun writeBundle_rejectsCompletedTimestampCollisionWithoutOverwriting() {
-        val photoFile = temporaryFolder.newFile("collision-photo.jpg")
+    fun writeBundle_replacesPreviousExportWithSameTimestamp() {
+        val photoFile1 = temporaryFolder.newFile("collision-photo1.jpg")
+        val photoFile2 = temporaryFolder.newFile("collision-photo2.jpg")
         val outputDirectory = temporaryFolder.newFolder("collision-exports")
         val finalDirectory = File(outputDirectory, "dataset-3000").apply { mkdirs() }
         val marker = File(finalDirectory, "keep.txt").apply { writeText("existing") }
-        val queue =
+
+        val queue1 =
             TrainingDatasetExporter.buildQueue(
                 historyItems = listOf(sampleHistoryItem()),
-                captures = listOf(sampleCapture(photoPath = photoFile.absolutePath)),
+                captures = listOf(sampleCapture(photoPath = photoFile1.absolutePath)),
                 nowMillis = 2_000,
             )
 
-        runCatching {
-            TrainingDatasetExporter.writeBundle(queue.filter { it.isEligible }, outputDirectory, 3_000)
-        }.onSuccess { throw AssertionError("Expected timestamp collision to fail") }
+        val bundle1 =
+            TrainingDatasetExporter.writeBundle(
+                queue1.filter { it.isEligible },
+                outputDirectory,
+                3_000,
+            )
 
-        assertEquals("existing", marker.readText())
-        assertFalse(File(outputDirectory, "dataset-3000.zip").exists())
+        assertTrue(bundle1.archiveFile.exists())
+        assertFalse(marker.exists())
+
+        val queue2 =
+            TrainingDatasetExporter.buildQueue(
+                historyItems = listOf(sampleHistoryItem()),
+                captures = listOf(sampleCapture(photoPath = photoFile2.absolutePath)),
+                nowMillis = 2_000,
+            )
+
+        val bundle2 =
+            TrainingDatasetExporter.writeBundle(
+                queue2.filter { it.isEligible },
+                outputDirectory,
+                3_000,
+            )
+
+        assertTrue(bundle2.archiveFile.exists())
+        assertFalse(marker.exists())
     }
 
     @Test
@@ -181,6 +203,69 @@ class TrainingDatasetExportTest {
             outputDirectory = temporaryFolder.newFolder("exports"),
             createdAtMillis = 3_000,
         )
+    }
+
+    @Test
+    fun writeBundle_deletesPreviousExportOutputOnStart() {
+        val photoFile1 = temporaryFolder.newFile("photo1.jpg")
+        val photoFile2 = temporaryFolder.newFile("photo2.jpg")
+        val outputDirectory = temporaryFolder.newFolder("exports")
+        val queue1 =
+            TrainingDatasetExporter.buildQueue(
+                historyItems = listOf(sampleHistoryItem()),
+                captures = listOf(sampleCapture(photoPath = photoFile1.absolutePath)),
+                nowMillis = 2_000,
+            )
+
+        val bundle1 =
+            TrainingDatasetExporter.writeBundle(
+                eligibleItems = queue1.filter { it.isEligible },
+                outputDirectory = outputDirectory,
+                createdAtMillis = 3_000,
+            )
+
+        assertTrue(bundle1.archiveFile.exists())
+
+        val queue2 =
+            TrainingDatasetExporter.buildQueue(
+                historyItems = listOf(sampleHistoryItem()),
+                captures = listOf(sampleCapture(photoPath = photoFile2.absolutePath)),
+                nowMillis = 2_000,
+            )
+
+        val bundle2 =
+            TrainingDatasetExporter.writeBundle(
+                eligibleItems = queue2.filter { it.isEligible },
+                outputDirectory = outputDirectory,
+                createdAtMillis = 4_000,
+            )
+
+        assertFalse(bundle1.archiveFile.exists())
+        assertTrue(bundle2.archiveFile.exists())
+    }
+
+    @Test
+    fun writeBundle_deletesUnzippedBundleAfterArchivePublished() {
+        val photoFile = temporaryFolder.newFile("photo.jpg")
+        val outputDirectory = temporaryFolder.newFolder("exports")
+        val queue =
+            TrainingDatasetExporter.buildQueue(
+                historyItems = listOf(sampleHistoryItem()),
+                captures = listOf(sampleCapture(photoPath = photoFile.absolutePath)),
+                nowMillis = 2_000,
+            )
+
+        val bundle =
+            TrainingDatasetExporter.writeBundle(
+                eligibleItems = queue.filter { it.isEligible },
+                outputDirectory = outputDirectory,
+                createdAtMillis = 3_000,
+            )
+
+        assertTrue(bundle.archiveFile.exists())
+        ZipFile(bundle.archiveFile).use { archive ->
+            assertTrue(archive.getEntry("manifest.jsonl") != null)
+        }
     }
 
     private fun sampleHistoryItem(

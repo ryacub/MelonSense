@@ -31,16 +31,13 @@ data class TrainingQueueItem(
 }
 
 data class TrainingDatasetBundle(
-    val bundleDirectory: File,
-    val manifestFile: File,
     val archiveFile: File,
     val entryCount: Int,
     val createdAtMillis: Long,
 ) {
     fun deleteOutput() {
         val archiveDeleted = !archiveFile.exists() || archiveFile.delete()
-        val directoryDeleted = !bundleDirectory.exists() || bundleDirectory.deleteRecursively()
-        check(archiveDeleted && directoryDeleted) { "Cannot remove incomplete export output." }
+        check(archiveDeleted) { "Cannot remove incomplete export output." }
     }
 }
 
@@ -79,6 +76,7 @@ object TrainingDatasetExporter {
     ): TrainingDatasetBundle {
         require(eligibleItems.isNotEmpty()) { "Cannot export an empty training dataset." }
         check(outputDirectory.mkdirs() || outputDirectory.isDirectory) { "Cannot create export directory." }
+        deletePreviousExportOutputs(outputDirectory)
         val bundleName = "dataset-$createdAtMillis"
         val bundleDirectory = File(outputDirectory, bundleName)
         val archiveFile = File(outputDirectory, "$bundleName.zip")
@@ -104,9 +102,8 @@ object TrainingDatasetExporter {
             moveOrThrow(temporaryDirectory, bundleDirectory)
             publishedDirectory = true
             moveOrThrow(temporaryArchive, archiveFile)
+            bundleDirectory.deleteRecursively()
             return TrainingDatasetBundle(
-                bundleDirectory = bundleDirectory,
-                manifestFile = File(bundleDirectory, "manifest.jsonl"),
                 archiveFile = archiveFile,
                 entryCount = eligibleItems.size,
                 createdAtMillis = createdAtMillis,
@@ -117,6 +114,20 @@ object TrainingDatasetExporter {
             if (publishedDirectory) bundleDirectory.deleteRecursively()
             archiveFile.delete()
             throw exception
+        }
+    }
+
+    private fun deletePreviousExportOutputs(outputDirectory: File) {
+        outputDirectory.listFiles()?.forEach { file ->
+            val isDatasetDirectory = file.isDirectory && file.name.startsWith("dataset-")
+            val isZipArchive = file.isFile && file.name.endsWith(".zip") && file.name.startsWith("dataset-")
+            if (isDatasetDirectory || isZipArchive) {
+                if (file.isDirectory) {
+                    file.deleteRecursively()
+                } else {
+                    file.delete()
+                }
+            }
         }
     }
 
