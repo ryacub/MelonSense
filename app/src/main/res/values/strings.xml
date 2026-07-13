@@ -58,7 +58,12 @@
     <string name="history_body">Pending Outcome, Rated, and Expired Media entries will appear here.</string>
     <string name="history_empty">Picked melons will appear here after you tap I Picked This.</string>
     <string name="history_scores">Visual %1$d / Audio %2$d</string>
+    <string name="history_audio_score">Audio %1$d</string>
+    <string name="history_ratings">%1$s / %2$s</string>
     <string name="history_training_status">Training: %1$s</string>
+    <string name="history_tab_picks">Picks</string>
+    <string name="history_tab_training">Training</string>
+    <string name="history_add_outcome">Add Outcome</string>
     <string name="history_edit_outcome">Edit Outcome</string>
     <string name="history_editing">Editing</string>
     <string name="history_outcome_title">Outcome</string>

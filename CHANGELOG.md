@@ -20,6 +20,7 @@ All notable project changes should be recorded here.
 
 ### Changed
 
+- History now separates pick review from training export and uses focused outcome editing.
 - Navigation now keeps Knock Test and Result inside the assessment flow while limiting the bottom bar to top-level screens.
 - Training dataset exports are now atomic, shareable ZIP files with progress, failure, and retry states.
 - Settings now controls default-on training-media retention and supports manual expired-media cleanup.

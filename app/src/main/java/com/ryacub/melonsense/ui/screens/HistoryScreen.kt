@@ -7,15 +7,23 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,7 +44,10 @@ import com.ryacub.melonsense.data.history.TrainingExportStatus
 import com.ryacub.melonsense.data.training.TrainingQueueBlockReason
 import com.ryacub.melonsense.data.training.TrainingQueueItem
 import com.ryacub.melonsense.domain.model.ResultLabel
+import java.text.DateFormat
+import java.util.Date
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     historyItems: List<PickHistoryItem>,
@@ -51,59 +62,99 @@ fun HistoryScreen(
         texture: TextureRating,
     ) -> Unit,
 ) {
-    var selectedItemId by remember { mutableStateOf<Long?>(null) }
-    val selectedItem =
-        historyItems.firstOrNull { item -> item.id == selectedItemId }
-            ?: historyItems.firstOrNull()
+    var viewState by remember { mutableStateOf(HistoryViewState()) }
+    val editingItem = historyItems.firstOrNull { item -> item.id == viewState.editingItemId }
 
     LaunchedEffect(historyItems) {
-        if (selectedItemId == null || historyItems.none { item -> item.id == selectedItemId }) {
-            selectedItemId = historyItems.firstOrNull()?.id
-        }
+        viewState = viewState.reduce(HistoryViewEvent.ItemsChanged(historyItems.mapTo(mutableSetOf()) { item -> item.id }))
     }
 
     Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize(),
     ) {
-        Text(
-            text = stringResource(R.string.history_title),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-
-        if (historyItems.isEmpty()) {
-            Text(
-                text = stringResource(R.string.history_empty),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            return@Column
+        PrimaryTabRow(selectedTabIndex = viewState.selectedTab.ordinal) {
+            HistoryTab.entries.forEach { tab ->
+                Tab(
+                    selected = viewState.selectedTab == tab,
+                    onClick = { viewState = viewState.reduce(HistoryViewEvent.SelectTab(tab)) },
+                    text = {
+                        Text(
+                            stringResource(
+                                when (tab) {
+                                    HistoryTab.Picks -> R.string.history_tab_picks
+                                    HistoryTab.Training -> R.string.history_tab_training
+                                },
+                            ),
+                        )
+                    },
+                )
+            }
         }
 
-        TrainingQueueSection(
-            queueItems = trainingQueueItems,
-            exportState = trainingExportState,
-            onExportTrainingDataset = onExportTrainingDataset,
-            onShareTrainingDataset = onShareTrainingDataset,
-        )
-
-        historyItems.forEach { item ->
-            HistoryItemCard(
-                item = item,
-                isSelected = item.id == selectedItem?.id,
-                onSelect = { selectedItemId = item.id },
-            )
+        when (viewState.selectedTab) {
+            HistoryTab.Picks ->
+                PickHistoryList(
+                    historyItems = historyItems,
+                    onEditOutcome = { itemId -> viewState = viewState.reduce(HistoryViewEvent.EditOutcome(itemId)) },
+                )
+            HistoryTab.Training ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+                ) {
+                    item {
+                        TrainingQueueSection(
+                            queueItems = trainingQueueItems,
+                            exportState = trainingExportState,
+                            onExportTrainingDataset = onExportTrainingDataset,
+                            onShareTrainingDataset = onShareTrainingDataset,
+                        )
+                    }
+                }
         }
+    }
 
-        selectedItem?.let { item ->
+    editingItem?.let { item ->
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { viewState = viewState.reduce(HistoryViewEvent.DismissEditor) },
+            sheetState = sheetState,
+        ) {
             OutcomeEditor(
                 item = item,
-                onSaveOutcome = onSaveOutcome,
+                onSaveOutcome = { pickId, resultLabel, sweetness, texture ->
+                    onSaveOutcome(pickId, resultLabel, sweetness, texture)
+                    viewState = viewState.reduce(HistoryViewEvent.DismissEditor)
+                },
             )
+        }
+    }
+}
+
+@Composable
+private fun PickHistoryList(
+    historyItems: List<PickHistoryItem>,
+    onEditOutcome: (Long) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (historyItems.isEmpty()) {
+            item {
+                Text(
+                    text = stringResource(R.string.history_empty),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+        } else {
+            items(historyItems, key = { item -> item.id }) { item ->
+                HistoryItemCard(
+                    item = item,
+                    onEditOutcome = { onEditOutcome(item.id) },
+                )
+            }
         }
     }
 }
@@ -116,80 +167,78 @@ private fun TrainingQueueSection(
     onShareTrainingDataset: () -> Unit,
 ) {
     val eligibleCount = queueItems.count { item -> item.isEligible }
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.training_queue_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = stringResource(R.string.training_queue_summary, eligibleCount, queueItems.size),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (queueItems.isEmpty()) {
             Text(
-                text = stringResource(R.string.training_queue_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = stringResource(R.string.training_queue_summary, eligibleCount, queueItems.size),
+                text = stringResource(R.string.training_queue_empty),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            if (queueItems.isEmpty()) {
+        } else {
+            queueItems.take(5).forEach { item ->
+                TrainingQueueRow(item)
+            }
+        }
+        Button(
+            onClick = onExportTrainingDataset,
+            enabled = eligibleCount > 0 && exportState.canStart,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                stringResource(
+                    if (exportState.phase == TrainingExportPhase.Running) {
+                        R.string.training_queue_exporting
+                    } else {
+                        R.string.training_queue_export
+                    },
+                ),
+            )
+        }
+        when (exportState.phase) {
+            TrainingExportPhase.Idle,
+            TrainingExportPhase.Running,
+            -> Unit
+            TrainingExportPhase.Failed ->
                 Text(
-                    text = stringResource(R.string.training_queue_empty),
+                    text = stringResource(R.string.training_queue_export_failed),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
                 )
-            } else {
-                queueItems.take(5).forEach { item ->
-                    TrainingQueueRow(item)
-                }
-            }
-            Button(
-                onClick = onExportTrainingDataset,
-                enabled = eligibleCount > 0 && exportState.canStart,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            TrainingExportPhase.Succeeded -> {
                 Text(
-                    stringResource(
-                        if (exportState.phase == TrainingExportPhase.Running) {
-                            R.string.training_queue_exporting
-                        } else {
-                            R.string.training_queue_export
-                        },
-                    ),
+                    text =
+                        pluralStringResource(
+                            R.plurals.training_queue_export_succeeded,
+                            exportState.entryCount ?: 0,
+                            exportState.entryCount ?: 0,
+                        ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
                 )
-            }
-            when (exportState.phase) {
-                TrainingExportPhase.Idle,
-                TrainingExportPhase.Running,
-                -> Unit
-                TrainingExportPhase.Failed ->
+                OutlinedButton(
+                    onClick = onShareTrainingDataset,
+                    enabled = exportState.canShare,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.training_queue_share))
+                }
+                if (exportState.shareFailed) {
                     Text(
-                        text = stringResource(R.string.training_queue_export_failed),
+                        text = stringResource(R.string.training_queue_share_failed),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
-                TrainingExportPhase.Succeeded -> {
-                    Text(
-                        text =
-                            pluralStringResource(
-                                R.plurals.training_queue_export_succeeded,
-                                exportState.entryCount ?: 0,
-                                exportState.entryCount ?: 0,
-                            ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    OutlinedButton(
-                        onClick = onShareTrainingDataset,
-                        enabled = exportState.canShare,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.training_queue_share))
-                    }
-                    if (exportState.shareFailed) {
-                        Text(
-                            text = stringResource(R.string.training_queue_share_failed),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
                 }
             }
         }
@@ -226,9 +275,14 @@ private fun TrainingQueueRow(item: TrainingQueueItem) {
 @Composable
 private fun HistoryItemCard(
     item: PickHistoryItem,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
+    onEditOutcome: () -> Unit,
 ) {
+    val pickedAt =
+        remember(item.createdAtMillis) {
+            DateFormat
+                .getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                .format(Date(item.createdAtMillis))
+        }
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -240,24 +294,45 @@ private fun HistoryItemCard(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
+                text = pickedAt,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
                 text = stringResource(item.status.labelRes),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
-            Text(
-                text = stringResource(R.string.history_scores, item.visualScore ?: 0, item.audioScore),
+            item.visualScore?.let { visualScore ->
+                Text(
+                    text = stringResource(R.string.history_scores, visualScore, item.audioScore),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } ?: Text(
+                text = stringResource(R.string.history_audio_score, item.audioScore),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (item.sweetness != null && item.texture != null) {
+                Text(
+                    text =
+                        stringResource(
+                            R.string.history_ratings,
+                            stringResource(item.sweetness.labelRes),
+                            stringResource(item.texture.labelRes),
+                        ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Text(
                 text = stringResource(R.string.history_training_status, stringResource(item.trainingExportStatus.labelRes)),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            OutlinedButton(onClick = onSelect) {
+            OutlinedButton(onClick = onEditOutcome) {
                 Text(
                     text =
                         stringResource(
-                            if (isSelected) {
-                                R.string.history_editing
+                            if (item.status == PickHistoryStatus.PendingOutcome) {
+                                R.string.history_add_outcome
                             } else {
                                 R.string.history_edit_outcome
                             },
@@ -282,52 +357,55 @@ private fun OutcomeEditor(
         mutableStateOf(OutcomeEditorState.from(item))
     }
 
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.history_outcome_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+
+        SelectorGroup(
+            titleRes = R.string.history_result_label,
+            values = ResultLabel.entries,
+            selected = editorState.resultLabel,
+            labelFor = { label -> label.labelRes },
+            onSelected = { label -> editorState = editorState.selectResultLabel(label) },
+        )
+        SelectorGroup(
+            titleRes = R.string.history_sweetness,
+            values = SweetnessRating.entries,
+            selected = editorState.sweetness,
+            labelFor = { rating -> rating.labelRes },
+            onSelected = { rating -> editorState = editorState.selectSweetness(rating) },
+            showRequired = editorState.sweetness == null,
+        )
+        SelectorGroup(
+            titleRes = R.string.history_texture,
+            values = TextureRating.entries,
+            selected = editorState.texture,
+            labelFor = { rating -> rating.labelRes },
+            onSelected = { rating -> editorState = editorState.selectTexture(rating) },
+            showRequired = editorState.texture == null,
+        )
+
+        Button(
+            onClick = {
+                val sweetness = editorState.sweetness ?: return@Button
+                val texture = editorState.texture ?: return@Button
+                onSaveOutcome(item.id, editorState.resultLabel, sweetness, texture)
+            },
+            enabled = editorState.canSave,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
-                text = stringResource(R.string.history_outcome_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            SelectorGroup(
-                titleRes = R.string.history_result_label,
-                values = ResultLabel.entries,
-                selected = editorState.resultLabel,
-                labelFor = { label -> label.labelRes },
-                onSelected = { label -> editorState = editorState.selectResultLabel(label) },
-            )
-            SelectorGroup(
-                titleRes = R.string.history_sweetness,
-                values = SweetnessRating.entries,
-                selected = editorState.sweetness,
-                labelFor = { rating -> rating.labelRes },
-                onSelected = { rating -> editorState = editorState.selectSweetness(rating) },
-                showRequired = editorState.sweetness == null,
-            )
-            SelectorGroup(
-                titleRes = R.string.history_texture,
-                values = TextureRating.entries,
-                selected = editorState.texture,
-                labelFor = { rating -> rating.labelRes },
-                onSelected = { rating -> editorState = editorState.selectTexture(rating) },
-                showRequired = editorState.texture == null,
-            )
-
-            Button(
-                onClick = {
-                    val sweetness = editorState.sweetness ?: return@Button
-                    val texture = editorState.texture ?: return@Button
-                    onSaveOutcome(item.id, editorState.resultLabel, sweetness, texture)
-                },
-                enabled = editorState.canSave,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.history_save_outcome))
-            }
+            Text(stringResource(R.string.history_save_outcome))
         }
     }
 }
