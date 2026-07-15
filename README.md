@@ -12,6 +12,7 @@ local visual models, a knock-test audio heuristic, and personal outcome history.
 ## Current MVP
 
 - Photo-first assessment using packaged PyTorch Lite models on the device.
+- Metered automatic photo flash with explicit On and Off overrides.
 - Guided three-knock audio capture and local signal analysis.
 - Combined `Strong Pick`, `Good Candidate`, `Maybe`, or `Skip` result.
 - `I Picked This` history with sweetness and texture outcome ratings.

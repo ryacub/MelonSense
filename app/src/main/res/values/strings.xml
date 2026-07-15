@@ -24,6 +24,10 @@
     <string name="scan_visual_score">Visual score: %1$d</string>
     <string name="scan_visual_signal">Visual signal: %1$s</string>
     <string name="scan_camera_preview_description">Live camera preview of the watermelon</string>
+    <string name="scan_flash_label">Photo flash</string>
+    <string name="scan_flash_auto">Auto</string>
+    <string name="scan_flash_on">On</string>
+    <string name="scan_flash_off">Off</string>
     <string name="scan_permission_title">Camera permission needed</string>
     <string name="scan_permission_body">MelonSense needs camera access to show the live scan preview.</string>
     <string name="scan_permission_action">Allow Camera</string>

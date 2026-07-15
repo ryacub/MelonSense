@@ -2,6 +2,13 @@
 
 All notable project changes should be recorded here.
 
+## Unreleased
+
+### Added
+
+- Camera capture now defaults to metered automatic flash and provides explicit
+  On and Off overrides on the scan screen.
+
 ## [0.1.0] - 2026-07-14
 
 ### Added

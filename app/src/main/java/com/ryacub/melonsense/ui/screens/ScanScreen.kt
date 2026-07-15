@@ -27,12 +27,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FlashAuto
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -41,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,11 +88,13 @@ fun ScanScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val mediaStore = remember(context) { FileTrainingMediaStore(context) }
+    var flashMode by rememberSaveable { mutableStateOf(CameraFlashMode.default) }
     val cameraController =
         remember {
             LifecycleCameraController(context).apply {
                 cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                 setEnabledUseCases(LifecycleCameraController.IMAGE_CAPTURE)
+                imageCaptureFlashMode = flashMode.imageCaptureMode
             }
         }
     var hasCameraPermission by remember {
@@ -107,11 +116,17 @@ fun ScanScreen(
         }
     }
 
+    LaunchedEffect(cameraController, flashMode) {
+        cameraController.imageCaptureFlashMode = flashMode.imageCaptureMode
+    }
+
     if (hasCameraPermission) {
         ScanContent(
             cameraController = cameraController,
             scanAssessmentState = assessmentWorkflow.state,
             visualScanResult = assessmentWorkflow.visualScanResult,
+            flashMode = flashMode,
+            onFlashModeChange = { flashMode = it },
             onCaptureFrame = {
                 if (!assessmentWorkflow.state.canCapture) {
                     return@ScanContent
@@ -170,6 +185,8 @@ private fun ScanContent(
     cameraController: LifecycleCameraController,
     scanAssessmentState: ScanAssessmentState,
     visualScanResult: VisualScanResult?,
+    flashMode: CameraFlashMode,
+    onFlashModeChange: (CameraFlashMode) -> Unit,
     onCaptureFrame: () -> Unit,
     onStartKnockTest: () -> Unit,
 ) {
@@ -193,6 +210,12 @@ private fun ScanContent(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+
+        CameraFlashModeControl(
+            selectedMode = flashMode,
+            onModeSelected = onFlashModeChange,
+            enabled = scanAssessmentState.canCapture,
+        )
 
         VisualScanStatus(
             scanAssessmentState = scanAssessmentState,
@@ -225,6 +248,44 @@ private fun ScanContent(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun CameraFlashModeControl(
+    selectedMode: CameraFlashMode,
+    onModeSelected: (CameraFlashMode) -> Unit,
+    enabled: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.scan_flash_label),
+            style = MaterialTheme.typography.labelLarge,
+        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            CameraFlashMode.entries.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = selectedMode == mode,
+                    onClick = { onModeSelected(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index, CameraFlashMode.entries.size),
+                    enabled = enabled,
+                    icon = {
+                        Icon(
+                            imageVector =
+                                when (mode) {
+                                    CameraFlashMode.Auto -> Icons.Filled.FlashAuto
+                                    CameraFlashMode.On -> Icons.Filled.FlashOn
+                                    CameraFlashMode.Off -> Icons.Filled.FlashOff
+                                },
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                ) {
+                    Text(stringResource(mode.labelRes))
+                }
+            }
+        }
     }
 }
 
