@@ -66,10 +66,9 @@ private fun ResultSummary(assessmentResult: MelonAssessmentResult) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
+            ResultLabelBadge(
+                resultLabel = assessmentResult.resultLabel,
                 text = stringResource(R.string.result_recommendation, assessmentResult.recommendation),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text =

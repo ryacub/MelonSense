@@ -254,10 +254,9 @@ private fun TrainingQueueRow(item: TrainingQueueItem) {
             stringResource(R.string.training_queue_blocked, stringResource(item.blockReason.labelRes))
         }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
+        ResultLabelBadge(
+            resultLabel = item.historyItem.resultLabel,
             text = stringResource(item.historyItem.resultLabel.labelRes),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = statusText,
@@ -288,10 +287,9 @@ private fun HistoryItemCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
+            ResultLabelBadge(
+                resultLabel = item.resultLabel,
                 text = stringResource(item.resultLabel.labelRes),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = pickedAt,

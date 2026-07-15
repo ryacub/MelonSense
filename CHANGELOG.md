@@ -9,6 +9,11 @@ All notable project changes should be recorded here.
 - Camera capture now defaults to metered automatic flash and provides explicit
   On and Off overrides on the scan screen.
 
+### Changed
+
+- Replaced fallback Material colors with complete neutral, green-led light and
+  dark palettes, plus semantic result colors for assessment and history labels.
+
 ## [0.1.0] - 2026-07-14
 
 ### Added
